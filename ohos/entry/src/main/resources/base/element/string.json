@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "OpenP2P HarmonyOS 原生客户端"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "OpenP2P HarmonyOS 原生客户端"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "OpenP2P"
+    }
+  ]
+}
