@@ -21,6 +21,18 @@ export struct TokenCard {
           .margin({ left: 4 })
       }
 
+      if (this.state.tokenLocked) {
+        Row({ space: 6 }) {
+          SymbolGlyph($r('sys.symbol.lock_fill'))
+            .fontSize(15)
+            .fontColor([$r('app.color.accent')])
+          Text('Token 已因管理账号登录而锁定')
+            .fontSize(13)
+            .fontColor($r('app.color.accent'))
+        }
+        .width('100%')
+      }
+
       Stack({ alignContent: Alignment.End }) {
         Row() {
           SymbolGlyph($r('sys.symbol.lock_shield'))
@@ -35,7 +47,7 @@ export struct TokenCard {
             .padding({ left: 0, right: 48 })
             .backgroundColor(Color.Transparent)
             .borderRadius(12)
-            .enabled(!this.state.running && !this.state.busy)
+            .enabled(!this.state.tokenLocked && !this.state.running && !this.state.busy)
             .onChange((value: string): void => {
               this.state.token = value.replace(/[^0-9]/g, '');
             })
@@ -62,7 +74,7 @@ export struct TokenCard {
       }
       .width('100%')
 
-      Button('保存 Token')
+      Button(this.state.tokenLocked ? 'Token 已锁定' : '保存 Token')
         .width('100%')
         .height(48)
         .fontSize(15)
@@ -70,7 +82,7 @@ export struct TokenCard {
         .fontColor($r('app.color.accent'))
         .backgroundColor($r('app.color.accent_soft'))
         .borderRadius(14)
-        .enabled(!this.state.running && !this.state.busy)
+        .enabled(!this.state.tokenLocked && !this.state.running && !this.state.busy)
         .onClick((): void => this.onSave())
     }
     .width('100%')

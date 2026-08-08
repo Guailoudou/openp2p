@@ -3,9 +3,27 @@ export interface ManagementCredentials {
   password: string;
 }
 
+export interface LoginRequest {
+  user: string;
+  password: string;
+}
+
 export interface LoginResponse {
   error: number;
   token?: string;
+}
+
+export interface ManagementUserProfile {
+  token?: string;
+  user?: string;
+  email?: string;
+  phone?: string;
+  addtime?: string;
+}
+
+export interface UserProfileResponse {
+  error?: number;
+  profile?: ManagementUserProfile;
 }
 
 export interface ManagementDevice {

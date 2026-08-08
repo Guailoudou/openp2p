@@ -3,8 +3,10 @@ import {
   ApiResult,
   DeviceEditRequest,
   DeviceListResponse,
+  LoginRequest,
   LoginResponse,
   ManagementCredentials,
+  ManagementUserProfile,
   MemberStatusResponse,
   MappingDeleteRequest,
   MappingEditRequest,
@@ -13,7 +15,8 @@ import {
   PortMappingResponse,
   RemoteCheckResponse,
   RemoteCheckRequest,
-  SdwanConfig
+  SdwanConfig,
+  UserProfileResponse
 } from '../model/ManagementModels';
 
 const SERVER_HOST = 'https://console.openpxp.com';
@@ -27,11 +30,24 @@ export class ManagementApiService {
   }
 
   async login(credentials: ManagementCredentials): Promise<string> {
-    const response = await this.request<LoginResponse>('/api/v1/user/login', http.RequestMethod.POST, credentials, false);
+    const body: LoginRequest = {
+      user: credentials.username,
+      password: credentials.password
+    };
+    const response = await this.request<LoginResponse>('/api/v1/user/login', http.RequestMethod.POST, body, false);
     if (response.error !== 0 || !response.token || response.token.length === 0) {
       throw new Error('管理账号或密码错误');
     }
     return response.token;
+  }
+
+  async getUserProfile(): Promise<ManagementUserProfile> {
+    const response = await this.request<UserProfileResponse>('/api/v1/user/profile', http.RequestMethod.POST);
+    const token = response.profile?.token ? response.profile.token.trim() : '';
+    if ((response.error !== undefined && response.error !== 0) || !/^\d+$/.test(token) || token === '0') {
+      throw new Error('无法从用户信息获取 OpenP2P Token');
+    }
+    return response.profile as ManagementUserProfile;
   }
 
   async getDevices(): Promise<DeviceListResponse> {

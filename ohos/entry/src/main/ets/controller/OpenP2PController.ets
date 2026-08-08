@@ -47,7 +47,7 @@ export class OpenP2PController {
   }
 
   async saveToken(): Promise<void> {
-    if (this.state.running || this.state.busy) {
+    if (this.state.tokenLocked || this.state.running || this.state.busy) {
       return;
     }
     const token = this.state.token.trim();
@@ -66,6 +66,21 @@ export class OpenP2PController {
     } finally {
       this.state.busy = false;
     }
+  }
+
+  async applyManagedToken(token: string): Promise<void> {
+    const normalized = token.trim();
+    const error = this.validateToken(normalized);
+    if (error.length > 0) {
+      throw new Error(error);
+    }
+    await this.service.saveToken(normalized);
+    this.state.token = normalized;
+    this.state.tokenLocked = true;
+  }
+
+  unlockManagedToken(): void {
+    this.state.tokenLocked = false;
   }
 
   async exportLog(): Promise<void> {

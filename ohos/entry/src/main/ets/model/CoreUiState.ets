@@ -2,6 +2,7 @@
 export class CoreUiState {
   token: string = '';
   tokenVisible: boolean = false;
+  tokenLocked: boolean = false;
   busy: boolean = false;
   running: boolean = false;
   connected: boolean = false;

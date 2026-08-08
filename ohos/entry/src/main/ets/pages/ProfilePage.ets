@@ -12,6 +12,9 @@ export struct ProfilePage {
   @State private savingAccount: boolean = false;
   @Prop managementUsername: string = '';
   @Prop managementAuthenticated: boolean = false;
+  @Prop managementEmail: string = '';
+  @Prop managementPhone: string = '';
+  @Prop managementAddTime: string = '';
   onSaveManagementCredentials: (username: string, password: string) => Promise<boolean> =
     async (_username: string, _password: string): Promise<boolean> => false;
   onClearManagementCredentials: () => Promise<void> = async (): Promise<void> => {};
@@ -24,55 +27,76 @@ export struct ProfilePage {
   @Builder
   private managementAccountSheet() {
     Column({ space: 18 }) {
-      TextInput({ text: this.accountInput, placeholder: '请输入管理账号' })
-        .height(52)
-        .fontSize(16)
-        .backgroundColor($r('app.color.page_background'))
-        .borderRadius(14)
-        .onChange((value: string): void => {
-          this.accountInput = value;
-          this.accountMessage = '';
-        })
-
-      TextInput({ text: this.passwordInput, placeholder: '请输入管理密码' })
-        .type(InputType.Password)
-        .height(52)
-        .fontSize(16)
-        .backgroundColor($r('app.color.page_background'))
-        .borderRadius(14)
-        .onChange((value: string): void => {
-          this.passwordInput = value;
-          this.accountMessage = '';
-        })
-
-      if (this.accountMessage.length > 0) {
-        Text(this.accountMessage)
-          .width('100%')
-          .fontSize(14)
-          .fontColor($r('app.color.text_secondary'))
-      }
-
-      Button(this.savingAccount ? '正在登录…' : '保存并登录')
-        .width('100%')
-        .height(48)
-        .enabled(!this.savingAccount)
-        .onClick((): void => {
-          this.saveManagementAccount();
-        })
-
-      if (this.managementUsername.length > 0) {
-        Button('清除管理账号')
+      if (this.managementAuthenticated) {
+        this.profileItem('账号', this.managementUsername)
+        this.profileItem('邮箱', this.managementEmail.length > 0 ? this.managementEmail : '未填写')
+        this.profileItem('手机', this.managementPhone.length > 0 ? this.managementPhone : '未填写')
+        this.profileItem('注册时间', this.managementAddTime.length > 0 ? this.managementAddTime : '未知')
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.lock_fill')).fontSize(16).fontColor([$r('app.color.accent')])
+          Text('OpenP2P Token 已自动同步并锁定')
+            .fontSize(13).fontColor($r('app.color.accent'))
+        }.width('100%')
+        Blank().layoutWeight(1)
+        Button(this.savingAccount ? '正在退出…' : '退出登录')
           .width('100%')
           .height(48)
           .fontColor(Color.Red)
           .backgroundColor(Color.Transparent)
+          .enabled(!this.savingAccount)
           .onClick((): void => {
             this.clearManagementAccount();
           })
+      } else {
+        TextInput({ text: this.accountInput, placeholder: '请输入管理账号' })
+          .height(52)
+          .fontSize(16)
+          .backgroundColor($r('app.color.page_background'))
+          .borderRadius(14)
+          .onChange((value: string): void => {
+            this.accountInput = value;
+            this.accountMessage = '';
+          })
+
+        TextInput({ text: this.passwordInput, placeholder: '请输入管理密码' })
+          .type(InputType.Password)
+          .height(52)
+          .fontSize(16)
+          .backgroundColor($r('app.color.page_background'))
+          .borderRadius(14)
+          .onChange((value: string): void => {
+            this.passwordInput = value;
+            this.accountMessage = '';
+          })
+
+        if (this.accountMessage.length > 0) {
+          Text(this.accountMessage)
+            .width('100%')
+            .fontSize(14)
+            .fontColor($r('app.color.text_secondary'))
+        }
+
+        Button(this.savingAccount ? '正在登录…' : '保存并登录')
+          .width('100%')
+          .height(48)
+          .enabled(!this.savingAccount)
+          .onClick((): void => {
+            this.saveManagementAccount();
+          })
       }
     }
-    .width('100%')
+    .width('100%').height('100%')
     .padding({ left: 20, right: 20, top: 16, bottom: 32 })
+  }
+
+  @Builder
+  private profileItem(label: string, value: string) {
+    Row() {
+      Text(label).fontSize(14).fontColor($r('app.color.text_secondary'))
+      Blank()
+      Text(value).fontSize(15).fontColor($r('app.color.text_primary')).textAlign(TextAlign.End)
+    }
+    .width('100%').padding(14).backgroundColor($r('app.color.page_background')).borderRadius(12)
   }
 
   private async saveManagementAccount(): Promise<void> {
@@ -91,10 +115,16 @@ export struct ProfilePage {
         this.accountMessage = '账号已保存，但登录失败，请检查账号密码或网络';
       }
     } catch (error) {
-      this.accountMessage = `保存失败：${String(error)}`;
+      this.accountMessage = `登录失败：${this.errorMessage(error)}`;
     } finally {
       this.savingAccount = false;
     }
+  }
+
+  private errorMessage(error: Object): string {
+    const value = error as Record<string, Object>;
+    const message = value['message'];
+    return typeof message === 'string' && message.length > 0 ? message : String(error);
   }
 
   private async clearManagementAccount(): Promise<void> {
@@ -118,7 +148,7 @@ export struct ProfilePage {
         Column({ space: 12 }) {
           Row({ space: 14 }) {
             Row() {
-              SymbolGlyph($r('sys.symbol.display'))
+              SymbolGlyph($r('sys.symbol.person_fill'))
                 .fontSize(24)
                 .fontColor([$r('app.color.accent')])
             }

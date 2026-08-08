@@ -22,6 +22,9 @@ struct Index {
   @State private naviIndicatorHeight: number = 0;
   @State private managementAuthenticated: boolean = false;
   @State private managementUsername: string = '';
+  @State private managementEmail: string = '';
+  @State private managementPhone: string = '';
+  @State private managementAddTime: string = '';
   private controller?: OpenP2PController;
   private tabsController: HdsTabsController = new HdsTabsController();
   private managementSession: ManagementSession = ManagementSession.getInstance();
@@ -59,28 +62,58 @@ struct Index {
   private async initializeManagement(): Promise<void> {
     try {
       const authenticated = await this.managementSession.initialize();
-      this.managementUsername = this.managementSession.getUsername();
+      this.updateManagementProfile();
+      if (authenticated) {
+        await this.controller?.applyManagedToken(this.managementSession.getOpenP2PToken());
+      } else {
+        this.controller?.unlockManagedToken();
+      }
       this.managementAuthenticated = authenticated;
     } catch (error) {
       hilog.error(DOMAIN, TAG, 'Management login failed: %{public}s', JSON.stringify(error));
-      this.managementUsername = this.managementSession.getUsername();
+      this.updateManagementProfile();
       this.managementAuthenticated = false;
+      this.controller?.unlockManagedToken();
     }
   }
 
   private async saveManagementCredentials(username: string, password: string): Promise<boolean> {
     const authenticated = await this.managementSession.saveCredentialsAndLogin(username, password);
-    this.managementUsername = this.managementSession.getUsername();
+    this.updateManagementProfile();
+    if (authenticated) {
+      await this.controller?.applyManagedToken(this.managementSession.getOpenP2PToken());
+    } else {
+      this.controller?.unlockManagedToken();
+      this.managementAuthenticated = false;
+      const message = this.managementSession.getLastError();
+      throw new Error(message.length > 0 ? message : '管理账号登录失败');
+    }
     this.managementAuthenticated = authenticated;
+    this.selectedTab = 4;
+    setTimeout((): void => {
+      this.tabsController.changeIndex(4);
+    }, 0);
     return authenticated;
   }
 
   private async clearManagementCredentials(): Promise<void> {
     await this.managementSession.clear();
     this.managementUsername = '';
+    this.managementEmail = '';
+    this.managementPhone = '';
+    this.managementAddTime = '';
     this.managementAuthenticated = false;
+    this.controller?.unlockManagedToken();
     this.selectedTab = 0;
     this.tabsController.changeIndex(0);
+  }
+
+  private updateManagementProfile(): void {
+    const profile = this.managementSession.getProfile();
+    this.managementUsername = profile.user ? profile.user : this.managementSession.getUsername();
+    this.managementEmail = profile.email ? profile.email : '';
+    this.managementPhone = profile.phone ? profile.phone : '';
+    this.managementAddTime = profile.addtime ? profile.addtime : '';
   }
 
   build() {
@@ -108,7 +141,7 @@ struct Index {
           TabContent() {
             NetworkPage()
           }
-          .tabBar(this.tabBar($r('sys.symbol.display'), $r('sys.symbol.display'), '网络'))
+          .tabBar(this.tabBar($r('sys.symbol.hotspot'), $r('sys.symbol.hotspot'), '网络'))
         }
 
         TabContent() {
@@ -125,6 +158,9 @@ struct Index {
           ProfilePage({
             managementUsername: this.managementUsername,
             managementAuthenticated: this.managementAuthenticated,
+            managementEmail: this.managementEmail,
+            managementPhone: this.managementPhone,
+            managementAddTime: this.managementAddTime,
             onSaveManagementCredentials: async (username: string, password: string): Promise<boolean> =>
               this.saveManagementCredentials(username, password),
             onClearManagementCredentials: async (): Promise<void> => this.clearManagementCredentials()

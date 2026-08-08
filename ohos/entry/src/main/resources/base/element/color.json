@@ -8,8 +8,8 @@
     { "name": "text_secondary", "value": "#6B7280" },
     { "name": "text_tertiary", "value": "#9CA3AF" },
     { "name": "divider", "value": "#E5E7EB" },
-    { "name": "accent", "value": "#5B45D6" },
-    { "name": "accent_soft", "value": "#EEEAFE" },
+    { "name": "accent", "value": "#0A59F7" },
+    { "name": "accent_soft", "value": "#EAF2FF" },
     { "name": "button_text", "value": "#FFFFFF" },
     { "name": "badge_background", "value": "#E5E7EB" },
     { "name": "empty_title", "value": "#374151" },
@@ -22,7 +22,7 @@
     { "name": "status_connecting", "value": "#F59E0B" },
     { "name": "status_idle", "value": "#9CA3AF" },
     { "name": "danger", "value": "#EF4444" },
-    { "name": "accent_shadow", "value": "#265B45D6" },
+    { "name": "accent_shadow", "value": "#260A59F7" },
     { "name": "danger_shadow", "value": "#26EF4444" }
   ]
 }

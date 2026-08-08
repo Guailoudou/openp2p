@@ -10,6 +10,7 @@ import { ManagementSession } from '../service/ManagementSession';
 @Component
 export struct DevicePage {
   @State private devices: ManagementDevice[] = [];
+  @State private latestVersion: string = '';
   @State private mappings: PortMapping[] = [];
   @State private loading: boolean = false;
   @State private message: string = '';
@@ -60,6 +61,12 @@ export struct DevicePage {
     if (this.sheetMode === 'deleteDevice') {
       return '删除设备';
     }
+    if (this.sheetMode === 'confirmUpdate') {
+      return '确认升级';
+    }
+    if (this.sheetMode === 'confirmRestart') {
+      return '确认重启';
+    }
     return this.selectedDeviceName;
   }
 
@@ -69,6 +76,7 @@ export struct DevicePage {
     try {
       const response = await this.session.api.getDevices();
       this.devices = response.nodes ? response.nodes : [];
+      this.latestVersion = response.latestVer ? response.latestVer : '';
     } catch (error) {
       this.message = `加载设备失败：${String(error)}`;
     } finally {
@@ -127,12 +135,9 @@ export struct DevicePage {
 
   private async updateDevice(): Promise<void> {
     const device = this.selectedDevice();
-    if (!device || device.isActive !== 1) {
-      this.message = '设备离线，无法升级';
-      return;
-    }
-    if (device.os === 'Android') {
-      this.message = 'Android 设备请手动升级';
+    const reason = device ? this.upgradeUnavailableReason(device) : '未找到设备';
+    if (!device || reason.length > 0) {
+      this.message = reason;
       return;
     }
     try {
@@ -157,6 +162,64 @@ export struct DevicePage {
     } catch (error) {
       this.message = `重启失败：${String(error)}`;
     }
+  }
+
+  private requestDeviceUpdate(): void {
+    const device = this.selectedDevice();
+    if (!device) {
+      return;
+    }
+    const reason = this.upgradeUnavailableReason(device);
+    if (reason.length > 0) {
+      this.message = reason;
+      return;
+    }
+    this.sheetMode = 'confirmUpdate';
+  }
+
+  private requestDeviceRestart(): void {
+    const device = this.selectedDevice();
+    if (!device || device.isActive !== 1) {
+      this.message = '设备离线，无法重启';
+      return;
+    }
+    this.sheetMode = 'confirmRestart';
+  }
+
+  private upgradeUnavailableReason(device: ManagementDevice): string {
+    if (device.isActive !== 1) {
+      return '设备离线，无法升级';
+    }
+    const os = device.os.toLowerCase();
+    if (os.includes('android') || os.includes('ios') || os.includes('harmony')) {
+      return '手机客户端请通过应用市场或安装包手动升级';
+    }
+    if (this.latestVersion.length === 0) {
+      return '暂时无法获取最新版本，不能确认是否可升级';
+    }
+    if (device.isUpdate === 1 || this.compareVersion(device.version, this.latestVersion) >= 0) {
+      return `当前已是最新版本 ${this.latestVersion}`;
+    }
+    return '';
+  }
+
+  private selectedUpgradeReason(): string {
+    const device = this.selectedDevice();
+    return device ? this.upgradeUnavailableReason(device) : '未找到设备';
+  }
+
+  private compareVersion(left: string, right: string): number {
+    const leftParts = left.replace(/^v/i, '').split('.');
+    const rightParts = right.replace(/^v/i, '').split('.');
+    const count = Math.max(leftParts.length, rightParts.length);
+    for (let index = 0; index < count; index++) {
+      const difference = Number(leftParts[index] ? leftParts[index] : '0') -
+        Number(rightParts[index] ? rightParts[index] : '0');
+      if (difference !== 0) {
+        return difference > 0 ? 1 : -1;
+      }
+    }
+    return 0;
   }
 
   private async deleteDevice(): Promise<void> {
@@ -221,6 +284,44 @@ export struct DevicePage {
       this.originalSourcePort = 0;
     }
     this.sheetMode = 'editMapping';
+  }
+
+  private peerDevices(): ManagementDevice[] {
+    return this.devices.filter((item: ManagementDevice): boolean => item.name !== this.selectedDeviceName);
+  }
+
+  private showPeerDevicePicker(): void {
+    const peers = this.peerDevices();
+    if (peers.length === 0) {
+      this.message = '没有可选的远端设备';
+      return;
+    }
+    const names = peers.map((device: ManagementDevice): string => device.name);
+    let selected = names.indexOf(this.mappingPeerNode);
+    if (selected < 0) {
+      selected = 0;
+    }
+    this.getUIContext().showTextPickerDialog({
+      range: names,
+      selected: selected,
+      value: names[selected],
+      canLoop: false,
+      onAccept: (result: TextPickerResult): void => {
+        const value = result.value;
+        if (typeof value === 'string') {
+          this.mappingPeerNode = value;
+          if (this.selectedMappingIndex < 0) {
+            const peer = peers.find((device: ManagementDevice): boolean => device.name === value);
+            this.mappingTargetPort = peer && peer.os.toLowerCase().includes('windows') ? '3389' : '22';
+          }
+        }
+      }
+    });
+  }
+
+  private punchPriorityLabel(value: number): string {
+    const labels: string[] = ['默认', 'TCP 优先', '仅 TCP', '仅 UDP'];
+    return labels[value] ? labels[value] : labels[0];
   }
 
   private validateMapping(): string {
@@ -316,8 +417,13 @@ export struct DevicePage {
     Column({ space: 12 }) {
       Button('端口映射').width('100%').height(48).onClick((): void => { this.openMappings(); })
       Button('编辑设备').width('100%').height(48).onClick((): void => { this.openDeviceEditor(); })
-      Button('升级客户端').width('100%').height(48).onClick((): void => { this.updateDevice(); })
-      Button('重启设备').width('100%').height(48).onClick((): void => { this.restartDevice(); })
+      Button(this.latestVersion.length > 0 ? `升级客户端至 ${this.latestVersion}` : '升级客户端')
+        .width('100%').height(48).enabled(this.selectedUpgradeReason().length === 0)
+        .onClick((): void => { this.requestDeviceUpdate(); })
+      if (this.selectedUpgradeReason().length > 0) {
+        Text(this.selectedUpgradeReason()).width('100%').fontSize(13).fontColor($r('app.color.text_secondary'))
+      }
+      Button('重启设备').width('100%').height(48).onClick((): void => { this.requestDeviceRestart(); })
       Button('删除设备')
         .width('100%').height(48).fontColor(Color.Red).backgroundColor(Color.Transparent)
         .onClick((): void => { this.sheetMode = 'deleteDevice'; })
@@ -325,12 +431,26 @@ export struct DevicePage {
   }
 
   @Builder
+  private fieldLabel(title: string, description: string = '') {
+    Column({ space: 2 }) {
+      Text(title).width('100%').fontSize(14).fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_primary'))
+      if (description.length > 0) {
+        Text(description).width('100%').fontSize(12).fontColor($r('app.color.text_secondary'))
+      }
+    }.width('100%').alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
   private deviceEditor() {
     Column({ space: 14 }) {
+      this.fieldLabel('设备名称', '至少 8 个字符，用于管理中心识别设备')
       TextInput({ text: this.editDeviceName, placeholder: '设备名称' })
         .onChange((value: string): void => { this.editDeviceName = value; })
+      this.fieldLabel('共享带宽', '允许设备用于中继的最大带宽，单位 Mbps')
       TextInput({ text: this.editBandwidth, placeholder: '共享带宽 Mbps' })
         .type(InputType.Number).onChange((value: string): void => { this.editBandwidth = value; })
+      this.fieldLabel('公网监听端口', '0 表示自动选择；手动设置范围为 1-65535')
       TextInput({ text: this.editPublicPort, placeholder: '公网端口' })
         .type(InputType.Number).onChange((value: string): void => { this.editPublicPort = value; })
       Row() {
@@ -382,40 +502,72 @@ export struct DevicePage {
   @Builder
   private mappingEditor() {
     Scroll() {
-      Column({ space: 14 }) {
+      Column({ space: 12 }) {
+        this.fieldLabel('映射名称')
         TextInput({ text: this.mappingName, placeholder: '映射名称' })
+          .width('100%').height(48)
           .onChange((value: string): void => { this.mappingName = value; })
-        Select([{ value: 'TCP' }, { value: 'UDP' }])
-          .selected(this.mappingProtocol === 'tcp' ? 0 : 1)
-          .onSelect((index: number): void => { this.mappingProtocol = index === 0 ? 'tcp' : 'udp'; })
-        TextInput({ text: this.mappingSourcePort, placeholder: '本地端口' })
-          .type(InputType.Number).onChange((value: string): void => { this.mappingSourcePort = value; })
-        Text('远端设备').width('100%').fontSize(14).fontColor($r('app.color.text_secondary'))
-        Row({ space: 8 }) {
-          ForEach(this.devices.filter((item: ManagementDevice): boolean => item.name !== this.selectedDeviceName),
-            (device: ManagementDevice) => {
-              Button(device.name)
-                .fontColor(this.mappingPeerNode === device.name ? $r('app.color.button_text') : $r('app.color.text_primary'))
-                .backgroundColor(this.mappingPeerNode === device.name ? $r('app.color.accent') : $r('app.color.page_background'))
-                .onClick((): void => { this.mappingPeerNode = device.name; })
-            }, (device: ManagementDevice): string => device.name)
-        }.width('100%')
-        TextInput({ text: this.mappingTargetHost, placeholder: '远端主机' })
-          .onChange((value: string): void => { this.mappingTargetHost = value; })
-        TextInput({ text: this.mappingTargetPort, placeholder: '远端端口' })
-          .type(InputType.Number).onChange((value: string): void => { this.mappingTargetPort = value; })
-        TextInput({ text: this.mappingWhitelist, placeholder: '访问白名单（可选）' })
-          .onChange((value: string): void => { this.mappingWhitelist = value; })
-        TextInput({ text: this.mappingRelayNode, placeholder: '指定中继节点（可选）' })
-          .onChange((value: string): void => { this.mappingRelayNode = value; })
-        Text('打洞优先级').width('100%').fontSize(14).fontColor($r('app.color.text_secondary'))
-        Select([{ value: '默认' }, { value: 'TCP 优先' }, { value: '仅 TCP' }, { value: '仅 UDP' }])
-          .selected(this.mappingPunchPriority)
-          .onSelect((index: number): void => { this.mappingPunchPriority = index; })
         Row({ space: 10 }) {
-          Button('检测远端服务').layoutWeight(1).onClick((): void => { this.checkRemote(); })
-          Button('保存').layoutWeight(1).onClick((): void => { this.saveMapping(); })
+          Column({ space: 6 }) {
+            this.fieldLabel('协议')
+            Select([{ value: 'TCP' }, { value: 'UDP' }])
+              .width('100%').height(48)
+              .selected(this.mappingProtocol === 'tcp' ? 0 : 1)
+              .value(this.mappingProtocol === 'tcp' ? 'TCP' : 'UDP')
+              .onSelect((index: number): void => { this.mappingProtocol = index === 0 ? 'tcp' : 'udp'; })
+          }.width(112).alignItems(HorizontalAlign.Start)
+          Column({ space: 6 }) {
+            this.fieldLabel('本地端口')
+            TextInput({ text: this.mappingSourcePort, placeholder: '本地端口' })
+              .width('100%').height(48).type(InputType.Number)
+              .onChange((value: string): void => { this.mappingSourcePort = value; })
+          }.layoutWeight(1).alignItems(HorizontalAlign.Start)
         }.width('100%')
+        this.fieldLabel('远端设备')
+        Button() {
+          Row() {
+            Text(this.mappingPeerNode.length > 0 ? this.mappingPeerNode : '请选择远端设备')
+              .layoutWeight(1).textAlign(TextAlign.Start).fontColor($r('app.color.text_primary'))
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .fontSize(18).fontColor([$r('app.color.text_secondary')])
+          }.width('100%')
+        }
+        .width('100%').height(48).backgroundColor($r('app.color.page_background'))
+        .onClick((): void => { this.showPeerDevicePicker(); })
+        Row({ space: 10 }) {
+          Column({ space: 6 }) {
+            this.fieldLabel('远端主机')
+            TextInput({ text: this.mappingTargetHost, placeholder: '远端主机' })
+              .width('100%').height(48)
+              .onChange((value: string): void => { this.mappingTargetHost = value; })
+          }.layoutWeight(2).alignItems(HorizontalAlign.Start)
+          Column({ space: 6 }) {
+            this.fieldLabel('远端端口')
+            TextInput({ text: this.mappingTargetPort, placeholder: '远端端口' })
+              .width('100%').height(48).type(InputType.Number)
+              .onChange((value: string): void => { this.mappingTargetPort = value; })
+          }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+        }.width('100%')
+        this.fieldLabel('访问白名单')
+        TextInput({ text: this.mappingWhitelist, placeholder: '访问白名单（可选）' })
+          .width('100%').height(48)
+          .onChange((value: string): void => { this.mappingWhitelist = value; })
+        this.fieldLabel('指定中继节点')
+        TextInput({ text: this.mappingRelayNode, placeholder: '指定中继节点（可选）' })
+          .width('100%').height(48)
+          .onChange((value: string): void => { this.mappingRelayNode = value; })
+        Row({ space: 10 }) {
+          Column({ space: 6 }) {
+            this.fieldLabel('打洞优先级')
+            Select([{ value: '默认' }, { value: 'TCP 优先' }, { value: '仅 TCP' }, { value: '仅 UDP' }])
+              .width('100%').height(48)
+              .selected(this.mappingPunchPriority)
+              .value(this.punchPriorityLabel(this.mappingPunchPriority))
+              .onSelect((index: number): void => { this.mappingPunchPriority = index; })
+          }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+          Button('检测远端服务').layoutWeight(1).height(48).onClick((): void => { this.checkRemote(); })
+        }.width('100%').alignItems(VerticalAlign.Bottom)
+        Button('保存').width('100%').height(48).onClick((): void => { this.saveMapping(); })
       }.width('100%')
     }.width('100%').height('100%')
   }
@@ -434,6 +586,25 @@ export struct DevicePage {
         this.mappingList()
       } else if (this.sheetMode === 'editMapping') {
         this.mappingEditor()
+      } else if (this.sheetMode === 'confirmUpdate') {
+        Text(`确定将设备“${this.selectedDeviceName}”升级到 ${this.latestVersion} 吗？`)
+          .width('100%').fontSize(16).lineHeight(24)
+        Text('升级期间连接可能短暂中断。').width('100%').fontSize(13)
+          .fontColor($r('app.color.text_secondary'))
+        Row({ space: 10 }) {
+          Button('取消').layoutWeight(1).onClick((): void => { this.sheetMode = 'actions'; })
+          Button('确认升级').layoutWeight(1).onClick((): void => { this.updateDevice(); })
+        }.width('100%')
+      } else if (this.sheetMode === 'confirmRestart') {
+        Text(`确定重启设备“${this.selectedDeviceName}”吗？`)
+          .width('100%').fontSize(16).lineHeight(24)
+        Text('设备重启期间所有连接都会暂时断开。').width('100%').fontSize(13)
+          .fontColor($r('app.color.text_secondary'))
+        Row({ space: 10 }) {
+          Button('取消').layoutWeight(1).onClick((): void => { this.sheetMode = 'actions'; })
+          Button('确认重启').layoutWeight(1).fontColor(Color.White).backgroundColor(Color.Red)
+            .onClick((): void => { this.restartDevice(); })
+        }.width('100%')
       } else {
         Text(`确定从管理中心删除设备“${this.selectedDeviceName}”吗？`)
           .width('100%').fontSize(16).lineHeight(24)

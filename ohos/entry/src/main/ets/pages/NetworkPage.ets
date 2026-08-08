@@ -107,6 +107,30 @@ export struct NetworkPage {
     this.refreshConfig();
   }
 
+  private showAddDevicePicker(): void {
+    const available = this.availableDevices();
+    if (available.length === 0) {
+      this.message = '没有可加入网络的设备';
+      return;
+    }
+    const names = available.map((device: ManagementDevice): string => device.name);
+    this.getUIContext().showTextPickerDialog({
+      range: names,
+      selected: 0,
+      value: names[0],
+      canLoop: false,
+      onAccept: (result: TextPickerResult): void => {
+        const value = result.value;
+        if (typeof value === 'string') {
+          const device = available.find((item: ManagementDevice): boolean => item.name === value);
+          if (device) {
+            this.addMember(device);
+          }
+        }
+      }
+    });
+  }
+
   private removeMember(index: number): void {
     const removedName = this.config.Nodes[index].name;
     this.config.Nodes.splice(index, 1);
@@ -200,6 +224,11 @@ export struct NetworkPage {
       }
     }
     return 0;
+  }
+
+  private punchPriorityLabel(value: number): string {
+    const labels: string[] = ['默认', 'TCP 优先', '仅 TCP', '仅 UDP'];
+    return labels[value] ? labels[value] : labels[0];
   }
 
   private isValidIpv4(value: string): boolean {
@@ -334,6 +363,7 @@ export struct NetworkPage {
           Text('打洞优先级').width('100%').fontSize(14).fontColor($r('app.color.text_secondary'))
           Select([{ value: '默认' }, { value: 'TCP 优先' }, { value: '仅 TCP' }, { value: '仅 UDP' }])
             .selected(this.config.punchPriority)
+            .value(this.punchPriorityLabel(this.config.punchPriority))
             .onSelect((index: number): void => { this.config.punchPriority = index; this.refreshConfig(); })
         }
         .width('100%').padding(18).backgroundColor($r('app.color.card_background')).borderRadius(18)
@@ -360,12 +390,10 @@ export struct NetworkPage {
         if (this.availableDevices().length > 0) {
           Column({ space: 10 }) {
             Text('可加入设备').width('100%').fontSize(18).fontWeight(FontWeight.Medium)
-            ForEach(this.availableDevices(), (device: ManagementDevice) => {
-              Row() {
-                Text(device.name).layoutWeight(1).fontColor($r('app.color.text_primary'))
-                Button('加入').onClick((): void => { this.addMember(device); })
-              }.width('100%').padding(10)
-            }, (device: ManagementDevice): string => device.name)
+            Text(`当前有 ${this.availableDevices().length} 台设备可加入`)
+              .width('100%').fontSize(13).fontColor($r('app.color.text_secondary'))
+            Button('滑动选择设备')
+              .width('100%').height(48).onClick((): void => { this.showAddDevicePicker(); })
           }.width('100%').padding(18).backgroundColor($r('app.color.card_background')).borderRadius(18)
         }
 
