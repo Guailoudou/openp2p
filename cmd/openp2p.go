@@ -1,3 +1,6 @@
+//go:build !openharmony
+// +build !openharmony
+
 package main
 
 import (

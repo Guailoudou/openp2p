@@ -7,7 +7,7 @@ import (
 )
 
 func allowTunForward() {
-	if runtime.GOOS != "linux" { // only support Linux
+	if isOpenHarmonyPlatform() || runtime.GOOS != "linux" { // VPN framework owns OHOS forwarding
 		return
 	}
 	exec.Command("sh", "-c", `iptables -t filter -D FORWARD -i optun -j ACCEPT`).Run()
@@ -23,7 +23,7 @@ func allowTunForward() {
 }
 
 func clearSNATRule() {
-	if runtime.GOOS != "linux" {
+	if isOpenHarmonyPlatform() || runtime.GOOS != "linux" {
 		return
 	}
 	execCommand("iptables", true, "-t", "nat", "-D", "POSTROUTING", "-j", "OPSDWAN")
@@ -32,7 +32,7 @@ func clearSNATRule() {
 }
 
 func initSNATRule(localNet string) {
-	if runtime.GOOS != "linux" {
+	if isOpenHarmonyPlatform() || runtime.GOOS != "linux" {
 		return
 	}
 	clearSNATRule()
@@ -62,7 +62,7 @@ func initSNATRule(localNet string) {
 }
 
 func addSNATRule(target string) {
-	if runtime.GOOS != "linux" {
+	if isOpenHarmonyPlatform() || runtime.GOOS != "linux" {
 		return
 	}
 	err := execCommand("iptables", true, "-t", "nat", "-A", "OPSDWAN", "!", "-o", "optun",

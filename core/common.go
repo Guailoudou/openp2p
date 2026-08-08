@@ -307,7 +307,7 @@ func calcRetryTimeDirect(x float64) float64 {
 }
 
 func isAndroid() bool {
-	if runtime.GOOS == "android" {
+	if runtime.GOOS == "android" || isOpenHarmonyPlatform() {
 		return true
 	}
 	data, err := os.ReadFile("/proc/version")

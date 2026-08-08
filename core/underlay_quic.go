@@ -20,7 +20,7 @@ import (
 var quicVersion []quic.VersionNumber
 
 type underlayQUIC struct {
-	listener quic.Listener
+	listener *quic.Listener
 	writeMtx *sync.Mutex
 	quic.Stream
 	quic.Connection
@@ -103,16 +103,16 @@ func dialQuic(conn *net.UDPConn, remoteAddr *net.UDPAddr, timeout time.Duration)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	Connection, err := quic.DialContext(ctx, conn, remoteAddr, conn.LocalAddr().String(), tlsConf,
+	Connection, err := quic.Dial(ctx, conn, remoteAddr, tlsConf,
 		&quic.Config{Versions: quicVersion, MaxIdleTimeout: TunnelIdleTimeout, DisablePathMTUDiscovery: true})
 	if err != nil {
-		return nil, fmt.Errorf("quic.DialContext error:%s", err)
+		return nil, fmt.Errorf("quic.Dial error:%s", err)
 	}
 	stream, err := Connection.OpenStreamSync(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("OpenStreamSync error:%s", err)
 	}
-	qConn := &underlayQUIC{nil, &sync.Mutex{}, stream, Connection}
+	qConn := &underlayQUIC{writeMtx: &sync.Mutex{}, Stream: stream, Connection: Connection}
 	return qConn, nil
 }
 

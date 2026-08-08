@@ -1,5 +1,5 @@
-//go:build !linux && !windows && !darwin
-// +build !linux,!windows,!darwin
+//go:build !linux && !windows && !darwin && !openharmony
+// +build !linux,!windows,!darwin,!openharmony
 
 package openp2p
 

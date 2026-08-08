@@ -26,8 +26,8 @@ import (
 )
 
 var (
-	v4l            *v4Listener
-	onceP2PNetwork sync.Once
+	v4l       *v4Listener
+	networkMu sync.Mutex
 )
 
 const (
@@ -75,6 +75,8 @@ type P2PNetwork struct {
 	tunnelCloseCh        chan *P2PTunnel
 	loginMaxDelaySeconds int
 	peerNodeMutex        sync.Map
+	shutdownCh           chan struct{}
+	shutdownOnce         sync.Once
 }
 
 type msgCtx struct {
@@ -83,39 +85,60 @@ type msgCtx struct {
 }
 
 func P2PNetworkInstance() {
+	networkMu.Lock()
+	defer networkMu.Unlock()
+	if GNetwork != nil {
+		select {
+		case <-GNetwork.shutdownCh:
+			GNetwork = nil
+		default:
+			return
+		}
+	}
 	if GNetwork == nil {
-		onceP2PNetwork.Do(func() {
-			GNetwork = &P2PNetwork{
-				restartCh:            make(chan bool, 1),
-				tunnelCloseCh:        make(chan *P2PTunnel, 100),
-				nodeData:             make(chan []byte, 10000),
-				online:               false,
-				running:              true,
-				limiter:              newSpeedLimiter(gConf.Network.ShareBandwidth*1024*1024/8, 1),
-				dt:                   0,
-				ddt:                  0,
-				loginMaxDelaySeconds: DefaultLoginMaxDelaySeconds,
-				initTime:             time.Now(),
-			}
-			GNetwork.msgMap.Store(uint64(0), make(chan msgCtx, MsgQueueSize)) // for gateway
-			GNetwork.StartSDWAN()
-			v4l = &v4Listener{port: gConf.Network.PublicIPPort}
-			go GNetwork.keepAlive() // init() will block, keepalive should before init
-			GNetwork.init()
-			go GNetwork.run()
+		GNetwork = &P2PNetwork{
+			restartCh:            make(chan bool, 1),
+			tunnelCloseCh:        make(chan *P2PTunnel, 100),
+			nodeData:             make(chan []byte, 10000),
+			online:               false,
+			running:              true,
+			limiter:              newSpeedLimiter(gConf.Network.ShareBandwidth*1024*1024/8, 1),
+			dt:                   0,
+			ddt:                  0,
+			loginMaxDelaySeconds: DefaultLoginMaxDelaySeconds,
+			initTime:             time.Now(),
+			shutdownCh:           make(chan struct{}),
+		}
+		pn := GNetwork
+		pn.msgMap.Store(uint64(0), make(chan msgCtx, MsgQueueSize)) // for gateway
+		pn.StartSDWAN()
+		v4l = &v4Listener{port: gConf.Network.PublicIPPort}
+		go pn.keepAlive() // init() will block, keepalive should before init
+		pn.init()
+		go pn.run()
 
-			go func() {
-				ticker := time.NewTicker(10 * time.Minute)
-				defer ticker.Stop()
-				for range ticker.C {
+		go func() {
+			ticker := time.NewTicker(10 * time.Minute)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-pn.shutdownCh:
+					return
+				case <-ticker.C:
 					dumpStack()
 				}
-			}()
-			go func() {
-				for {
-					time.Sleep(time.Hour)
+			}
+		}()
+		go func() {
+			ticker := time.NewTicker(time.Hour)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-pn.shutdownCh:
+					return
+				case <-ticker.C:
 					oldIPv6 := gConf.IPv6()
-					GNetwork.refreshIPv6()
+					pn.refreshIPv6()
 					newIPv6 := gConf.IPv6()
 					if oldIPv6 != newIPv6 {
 						req := ReportBasic{
@@ -128,23 +151,27 @@ func P2PNetworkInstance() {
 							IPv6:            newIPv6,
 							PublicIPPort:    gConf.Network.PublicIPPort,
 						}
-						GNetwork.write(MsgReport, MsgReportBasic, &req)
+						pn.write(MsgReport, MsgReportBasic, &req)
 					}
 				}
-			}()
-			cleanTempFiles()
-			// go func() {
-			// 	log.Println("Starting pprof server on :16060")
-			// 	log.Println(http.ListenAndServe("0.0.0.0:16060", nil))
-			// }()
-		})
+			}
+		}()
+		cleanTempFiles()
+		// go func() {
+		// 	log.Println("Starting pprof server on :16060")
+		// 	log.Println(http.ListenAndServe("0.0.0.0:16060", nil))
+		// }()
 	}
 }
 
 func (pn *P2PNetwork) keepAlive() {
 	gLog.i("P2PNetwork keepAlive start")
 	for {
-		time.Sleep(time.Second * 10)
+		select {
+		case <-pn.shutdownCh:
+			return
+		case <-time.After(time.Second * 10):
+		}
 
 		if pn.hbTime.Before(time.Now().Add(-NetworkHeartbeatTime * 3)) {
 			if pn.initTime.After(time.Now().Add(-NetworkHeartbeatTime * 3)) {
@@ -173,14 +200,22 @@ func dumpStack() {
 
 func (pn *P2PNetwork) run() {
 	heartbeatTimer := time.NewTicker(NetworkHeartbeatTime)
+	defer heartbeatTimer.Stop()
 	pn.t1 = time.Now().UnixNano()
 	pn.write(MsgHeartbeat, 0, "")
 	for {
 		select {
+		case <-pn.shutdownCh:
+			return
 		case <-heartbeatTimer.C:
 			pn.t1 = time.Now().UnixNano()
 			pn.write(MsgHeartbeat, 0, "")
 		case isRestartDelay := <-pn.restartCh:
+			select {
+			case <-pn.shutdownCh:
+				return
+			default:
+			}
 			gLog.i("got restart channel")
 			// pn.sdwan.reset()
 			pn.online = false
@@ -194,7 +229,10 @@ func (pn *P2PNetwork) run() {
 			case <-waitDone:
 			case <-time.After(30 * time.Second):
 				gLog.e("pn.wgReconnect.Wait() timeout, mostly websocket hang. restart client")
-				os.Exit(0)
+				if !isAndroid() {
+					os.Exit(0)
+				}
+				continue
 			}
 
 			if isRestartDelay {
@@ -1023,6 +1061,11 @@ func (pn *P2PNetwork) push(to string, subType uint16, packet interface{}) error 
 }
 
 func (pn *P2PNetwork) close(isRestartDelay bool) {
+	select {
+	case <-pn.shutdownCh:
+		return
+	default:
+	}
 	if pn.running {
 		if pn.conn != nil {
 			pn.conn.Close()
@@ -1033,6 +1076,23 @@ func (pn *P2PNetwork) close(isRestartDelay bool) {
 	case pn.restartCh <- isRestartDelay:
 	default:
 	}
+}
+
+// shutdown stops the in-process client without scheduling the reconnect path
+// used for transient websocket failures. This is required by mobile hosts,
+// where the VPN extension owns the lifetime of the Go core.
+func (pn *P2PNetwork) shutdown() {
+	pn.shutdownOnce.Do(func() {
+		close(pn.shutdownCh)
+		pn.running = false
+		pn.online = false
+		if pn.conn != nil {
+			pn.conn.Close()
+		}
+		if pn.sdwan != nil && pn.sdwan.tun != nil {
+			pn.sdwan.tun.Stop()
+		}
+	})
 }
 
 func (pn *P2PNetwork) read(node string, mainType uint16, subType uint16, timeout time.Duration) (head *openP2PHeader, body []byte) {

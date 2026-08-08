@@ -17,7 +17,7 @@ type v4Listener struct {
 	acceptCh    chan bool
 	running     bool
 	tcpListener *net.TCPListener
-	udpListener quic.Listener
+	udpListener *quic.Listener
 	wg          sync.WaitGroup
 }
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"reflect"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -328,7 +327,7 @@ func handleSDWAN(subType uint16, msg []byte) error {
 			preAndroidSDWANConfig = "" // let androind app reset vpnservice
 		}
 		gConf.setSDWAN(rsp)
-		if runtime.GOOS == "android" {
+		if isAndroid() {
 			if !compareResources(preAndroidSDWANConfig, string(msg[openP2PHeaderSize:])) { // when config change, notify android app
 				select {
 				case AndroidSDWANConfig <- msg[openP2PHeaderSize:]:

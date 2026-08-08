@@ -81,8 +81,13 @@ func Run() {
 
 func RunAsModule(baseDir string, token string, bw int, logLevel int) *P2PNetwork {
 	rand.Seed(time.Now().UnixNano())
-	os.Chdir(baseDir) // for system service
+	if err := os.Chdir(baseDir); err != nil {
+		return nil
+	}
 	gLog = NewLogger(baseDir, ProductName, LvINFO, 1024*1024, LogFile|LogConsole)
+	if gLog == nil {
+		return nil
+	}
 
 	parseParams("", "")
 
@@ -91,6 +96,7 @@ func RunAsModule(baseDir string, token string, bw int, logLevel int) *P2PNetwork
 		gConf.setToken(n)
 	}
 	if n <= 0 && gConf.Network.Token == 0 { // not input token
+		gLog.e("OpenP2PStart rejected: token is missing or invalid")
 		return nil
 	}
 	// gLog.setLevel(LogLevel(logLevel))
@@ -106,6 +112,22 @@ func RunAsModule(baseDir string, token string, bw int, logLevel int) *P2PNetwork
 	}
 	// gLog.i("waiting for connection...")
 	return GNetwork
+}
+
+// StopModule stops the in-process core used by mobile clients. Desktop builds
+// terminate the child process from the launcher, while Android keeps the core
+// inside the app process and needs an explicit, non-process-exiting shutdown.
+func StopModule() {
+	networkMu.Lock()
+	defer networkMu.Unlock()
+	if GNetwork != nil {
+		GNetwork.shutdown()
+		if v4l != nil {
+			v4l.stop()
+			v4l = nil
+		}
+		GNetwork = nil
+	}
 }
 
 func RunCmd(cmd string) {

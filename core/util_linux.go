@@ -1,3 +1,6 @@
+//go:build linux && !openharmony
+// +build linux,!openharmony
+
 package openp2p
 
 import (

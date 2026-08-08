@@ -188,7 +188,11 @@ func handlePush(subType uint16, msg []byte) error {
 		gConf.Forcev6 = (req.Forcev6 != 0)
 		gLog.i("set forcev6 to %v", gConf.Forcev6)
 		gConf.save()
-		os.Exit(0)
+		if !isAndroid() {
+			os.Exit(0)
+		}
+		GNetwork.close(true)
+		return nil
 	case MsgPushSwitchApp:
 		gLog.i("MsgPushSwitchApp")
 		app := AppInfo{}

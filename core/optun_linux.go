@@ -1,5 +1,5 @@
-//go:build !android
-// +build !android
+//go:build !android && !openharmony
+// +build !android,!openharmony
 
 // optun_linux.go
 package openp2p
