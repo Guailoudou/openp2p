@@ -1,16 +1,20 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
+import { CoreService } from '../service/CoreService';
 
 const DOMAIN = 0x0000;
 
 export default class EntryAbility extends UIAbility {
+  private coreService?: CoreService;
+
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     try {
       this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
     } catch (err) {
       hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
     }
+    this.coreService = new CoreService(this.context);
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
   }
 
@@ -35,6 +39,9 @@ export default class EntryAbility extends UIAbility {
 
   onForeground(): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
+    this.coreService?.recoverIfNeeded().catch((error: Object) => {
+      hilog.error(DOMAIN, 'testTag', 'Automatic core recovery failed: %{public}s', JSON.stringify(error));
+    });
   }
 
   onBackground(): void {

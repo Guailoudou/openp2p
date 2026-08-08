@@ -669,7 +669,7 @@ HAP 中有两层 Native 库：
 nm -D --defined-only libopenp2p_ohos.so | grep OpenP2P
 ```
 
-确认 8 个接口均存在，并确认 `.so` 与 `.h` 来自同一次构建。
+确认 9 个接口均存在（包括 `OpenP2PIsRunning`），并确认 `.so` 与 `.h` 来自同一次构建。
 
 ### 16.4 CMake 报 `OpenP2P OHOS library was not found`
 
@@ -710,6 +710,15 @@ login ok
 OhosSDWANConfig={"Nodes":null}
 ```
 
+这是未分配 SD-WAN 时的正常状态，不影响端口映射。鸿蒙端的核心巡检只通过
+`OpenP2PIsRunning` 判断核心实例是否存活，不把服务器暂时离线、`Nodes:null`
+或未创建 TUN 当作核心故障。
+
+巡检每 10 秒执行一次，连续 3 次确认核心停止后才恢复；恢复延迟依次为
+2 秒、5 秒、15 秒和 60 秒，10 分钟内最多尝试 5 次。用户手动停止后会清除
+“期望运行”状态，不会被自动拉起。持续后台任务申请失败时，应用自动退化为
+仅依赖 VPN Extension，不会阻止核心启动。
+
 说明 SO 已成功加载且 OpenP2P 已登录，但服务端尚未给当前节点下发完整 SD-WAN 配置。这不是编译或动态库加载错误，需要在服务端将当前节点加入有效 SD-WAN。
 
 ## 17. 增加其他 ABI
@@ -742,4 +751,3 @@ OhosSDWANConfig={"Nodes":null}
 - [ ] HAP 内 SO 与源产物 SHA-256 一致；
 - [ ] 本机签名密码和证书路径没有进入公开提交；
 - [ ] 真机日志中没有 `dlopen`、`dlsym` 或 TLS relocation 错误。
-

@@ -6,57 +6,77 @@ export struct TokenCard {
   onSave: () => void = (): void => {};
 
   build() {
-    Column({ space: 12 }) {
-      Row() {
-        Text('访问 Token')
+    Column({ space: 16 }) {
+      Row({ space: 8 }) {
+        SymbolGlyph($r('sys.symbol.key_fill'))
+          .fontSize(20)
+          .fontColor([$r('app.color.accent')])
+        Text('Token')
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
-        Blank()
-        Text(this.state.running ? '运行期间不可修改' : 'uint64')
+        Text('设备认证凭据')
           .fontSize(12)
           .fontColor($r('app.color.text_tertiary'))
+          .margin({ left: 4 })
       }
 
       Stack({ alignContent: Alignment.End }) {
-        TextInput({ text: this.state.token, placeholder: '请输入 OpenP2P Token' })
-          .type(this.state.tokenVisible ? InputType.Normal : InputType.Password)
-          .showPasswordIcon(false)
-          .fontSize(16)
-          .height(52)
-          .padding({ left: 14, right: 52 })
-          .backgroundColor($r('app.color.input_background'))
-          .borderRadius(12)
-          .enabled(!this.state.running && !this.state.busy)
-          .onChange((value: string): void => {
-            this.state.token = value.replace(/[^0-9]/g, '');
-          })
-        Button(this.state.tokenVisible ? '隐藏' : '显示')
-          .type(ButtonType.Normal)
-          .fontSize(12)
-          .fontColor($r('app.color.accent'))
-          .backgroundColor(Color.Transparent)
-          .margin({ right: 4 })
-          .enabled(!this.state.running)
-          .onClick((): void => {
-            this.state.tokenVisible = !this.state.tokenVisible;
-          })
+        Row() {
+          SymbolGlyph($r('sys.symbol.lock_shield'))
+            .fontSize(20)
+            .fontColor([$r('app.color.text_tertiary')])
+            .margin({ left: 14, right: 10 })
+          TextInput({ text: this.state.token, placeholder: '请输入 OpenP2P Token' })
+            .type(this.state.tokenVisible ? InputType.Normal : InputType.Password)
+            .showPasswordIcon(false)
+            .fontSize(16)
+            .height(52)
+            .padding({ left: 0, right: 48 })
+            .backgroundColor(Color.Transparent)
+            .borderRadius(12)
+            .enabled(!this.state.running && !this.state.busy)
+            .onChange((value: string): void => {
+              this.state.token = value.replace(/[^0-9]/g, '');
+            })
+        }
+        .width('100%')
+        .height(52)
+        .backgroundColor($r('app.color.input_background'))
+        .borderRadius(14)
+
+        Button() {
+          SymbolGlyph($r(this.state.tokenVisible ? 'sys.symbol.eye_slash' : 'sys.symbol.eye'))
+            .fontSize(20)
+            .fontColor([$r('app.color.accent')])
+        }
+        .type(ButtonType.Circle)
+        .width(36)
+        .height(36)
+        .margin({ right: 8 })
+        .backgroundColor(Color.Transparent)
+        .enabled(!this.state.running)
+        .onClick((): void => {
+          this.state.tokenVisible = !this.state.tokenVisible;
+        })
       }
       .width('100%')
 
       Button('保存 Token')
         .width('100%')
-        .height(44)
+        .height(48)
         .fontSize(15)
+        .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.accent'))
         .backgroundColor($r('app.color.accent_soft'))
-        .borderRadius(12)
+        .borderRadius(14)
         .enabled(!this.state.running && !this.state.busy)
         .onClick((): void => this.onSave())
     }
     .width('100%')
-    .padding(20)
+    .padding({ left: 20, right: 20, top: 22, bottom: 22 })
     .backgroundColor($r('app.color.card_background'))
     .borderRadius(20)
+    .shadow({ radius: 20, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 8 })
   }
 }

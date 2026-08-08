@@ -1,85 +1,126 @@
-import { bundleManager } from '@kit.AbilityKit';
+import { webview } from '@kit.ArkWeb';
 import { PageHeader } from '../components/PageHeader';
+import { AboutPage } from './AboutPage';
 
 @Component
 export struct ProfilePage {
-  @State private appVersion: string = '未知';
+  @State private showAbout: boolean = false;
+  @State private showManagementCenter: boolean = false;
+  @State private aboutPressed: boolean = false;
+  private managementCenterController: webview.WebviewController = new webview.WebviewController();
 
-  aboutToAppear(): void {
-    try {
-      const bundleInfo = bundleManager.getBundleInfoForSelfSync(
-        bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT);
-      this.appVersion = bundleInfo.versionName;
-    } catch (_) {
-      this.appVersion = '未知';
-    }
+  @Builder
+  private aboutSheet() {
+    AboutPage()
   }
 
   @Builder
-  private infoRow(label: string, value: string) {
-    Row() {
-      Text(label)
-        .fontSize(15)
-        .fontColor($r('app.color.text_secondary'))
-      Blank()
-      Text(value)
-        .fontSize(15)
-        .fontColor($r('app.color.text_primary'))
-    }
-    .width('100%')
-    .padding({ top: 14, bottom: 14 })
+  private managementCenterSheet() {
+    Web({
+      src: 'https://console.openpxp.com/',
+      controller: this.managementCenterController
+    })
+      .width('100%')
+      .height('100%')
+      .javaScriptAccess(true)
+      .domStorageAccess(true)
   }
 
   build() {
     Scroll() {
       Column({ space: 18 }) {
-        PageHeader({ title: '我的', subtitle: '应用与核心信息' })
+        PageHeader({ title: '我的', subtitle: '应用设置与信息' })
 
-        Column({ space: 10 }) {
-          Text('O')
-            .width(68)
-            .height(68)
-            .textAlign(TextAlign.Center)
-            .fontSize(34)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.button_text'))
-            .backgroundColor($r('app.color.accent'))
-            .borderRadius(18)
-          Text('OpenP2P')
-            .fontSize(24)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
-          Text('HarmonyOS 原生客户端')
-            .fontSize(14)
-            .fontColor($r('app.color.text_secondary'))
-        }
-        .width('100%')
-        .padding(24)
-        .backgroundColor($r('app.color.card_background'))
-        .borderRadius(20)
+        Column({ space: 12 }) {
+          Row({ space: 14 }) {
+            Row() {
+              SymbolGlyph($r('sys.symbol.display'))
+                .fontSize(24)
+                .fontColor([$r('app.color.accent')])
+            }
+            .width(44)
+            .height(44)
+            .backgroundColor($r('app.color.accent_soft'))
+            .borderRadius(12)
+            .justifyContent(FlexAlign.Center)
 
-        Column() {
-          this.infoRow('应用版本', this.appVersion)
-          Divider().color($r('app.color.divider'))
-          this.infoRow('运行平台', 'HarmonyOS')
-          Divider().color($r('app.color.divider'))
-          this.infoRow('核心架构', 'arm64-v8a')
-          Divider().color($r('app.color.divider'))
-          this.infoRow('核心类型', 'OpenP2P Go Native')
-        }
-        .width('100%')
-        .padding({ left: 18, right: 18 })
-        .backgroundColor($r('app.color.card_background'))
-        .borderRadius(20)
+            Column({ space: 3 }) {
+              Text('管理中心')
+                .fontSize(17)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_primary'))
+              Text('打开 Web 管理控制台')
+                .fontSize(13)
+                .fontColor($r('app.color.text_secondary'))
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
 
-        Text('OpenP2P 提供安全、轻量的点对点网络连接能力。本客户端使用 ArkTS 与 ArkUI 原生组件构建。')
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .fontSize(18)
+              .fontColor([$r('app.color.text_tertiary')])
+          }
           .width('100%')
-          .fontSize(14)
-          .fontColor($r('app.color.text_secondary'))
-          .lineHeight(22)
           .padding(18)
           .backgroundColor($r('app.color.card_background'))
           .borderRadius(16)
+          .shadow({ radius: 16, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 6 })
+          .onClick((): void => {
+            this.showManagementCenter = true;
+          })
+          .bindSheet($$this.showManagementCenter, this.managementCenterSheet(), {
+            height: SheetSize.LARGE,
+            dragBar: true,
+            preferType: SheetType.BOTTOM,
+            title: { title: '管理中心' }
+          })
+
+          Row({ space: 14 }) {
+            Row() {
+              SymbolGlyph($r('sys.symbol.info_circle_fill'))
+                .fontSize(24)
+                .fontColor([$r('app.color.accent')])
+            }
+            .width(44)
+            .height(44)
+            .backgroundColor($r('app.color.accent_soft'))
+            .borderRadius(12)
+            .justifyContent(FlexAlign.Center)
+
+            Column({ space: 3 }) {
+              Text('关于')
+                .fontSize(17)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_primary'))
+              Text('查看版本和软件信息')
+                .fontSize(13)
+                .fontColor($r('app.color.text_secondary'))
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .fontSize(18)
+              .fontColor([$r('app.color.text_tertiary')])
+          }
+          .width('100%')
+          .padding(18)
+          .backgroundColor($r('app.color.card_background'))
+          .borderRadius(16)
+          .shadow({ radius: 16, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 6 })
+          .gesture(
+            LongPressGesture()
+              .onAction((): void => {
+                this.aboutPressed = true;
+              })
+              .onActionEnd((): void => {
+                this.aboutPressed = false;
+              })
+          )
+          .onClick((): void => {
+            this.showAbout = true;
+          })
+        }
       }
       .width('100%')
       .padding({ left: 20, right: 20, top: 24, bottom: 128 })
@@ -87,5 +128,11 @@ export struct ProfilePage {
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
+    .bindSheet($$this.showAbout, this.aboutSheet(), {
+      height: SheetSize.LARGE,
+      dragBar: true,
+      preferType: SheetType.BOTTOM,
+      title: { title: '关于' }
+    })
   }
 }

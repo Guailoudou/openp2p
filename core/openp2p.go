@@ -130,6 +130,24 @@ func StopModule() {
 	}
 }
 
+// IsModuleRunning reports whether the in-process core instance is still
+// alive. It deliberately does not require the control connection to be
+// online and does not depend on SD-WAN/TUN state: transient reconnects and
+// port-forward-only configurations are both valid running states.
+func IsModuleRunning() bool {
+	networkMu.Lock()
+	defer networkMu.Unlock()
+	if GNetwork == nil {
+		return false
+	}
+	select {
+	case <-GNetwork.shutdownCh:
+		return false
+	default:
+		return true
+	}
+}
+
 func RunCmd(cmd string) {
 	rand.Seed(time.Now().UnixNano())
 	baseDir := filepath.Dir(os.Args[0])

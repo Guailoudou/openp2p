@@ -4,6 +4,8 @@ import { Want } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import coreNative from 'libentry.so';
+import { RuntimeStateStore } from '../service/RuntimeStateStore';
+import { TokenStore } from '../service/TokenStore';
 
 const DOMAIN = 0x0;
 const TAG = 'OPL-VPN';
@@ -14,6 +16,11 @@ const MAX_PACKET_SIZE = 64 * 1024;
 const WRITE_TIMEOUT_MS = 50;
 const VPN_INTERFACE = 'vpn-tun';
 const POLL_INTERVAL_MS = 5;
+const CORE_CHECK_INTERVAL_MS = 10 * 1000;
+const CORE_FAILURE_THRESHOLD = 3;
+const RECOVERY_WINDOW_MS = 10 * 60 * 1000;
+const MAX_RECOVERIES_PER_WINDOW = 5;
+const RECOVERY_DELAYS_MS: number[] = [2 * 1000, 5 * 1000, 15 * 1000, 60 * 1000];
 
 interface CoreState {
   baseDir: string;
@@ -59,6 +66,13 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
   private requestId: number = 0;
   private readBuffer: ArrayBuffer = new ArrayBuffer(MAX_PACKET_SIZE);
   private writeBuffer: ArrayBuffer = new ArrayBuffer(MAX_PACKET_SIZE);
+  private launchState?: CoreState;
+  private watchdogTimer: number = -1;
+  private consecutiveCoreFailures: number = 0;
+  private recoveryInProgress: boolean = false;
+  private recoveryTimestamps: number[] = [];
+  private currentStatusState: string = 'starting';
+  private currentStatusMessage: string = 'VPN 扩展已启动';
 
   onCreate(want: Want): void {
     this.stopping = false;
@@ -71,12 +85,14 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
       this.removeFile(VPN_REQUEST_FILE);
       this.writeStatus('failed', detail, this.requestId);
       hilog.error(DOMAIN, TAG, 'VPN initialization failed: %{public}s', detail);
+      this.stopCoreWatchdog();
       this.stopCore();
     });
   }
 
   onDestroy(): void {
     this.stopping = true;
+    this.stopCoreWatchdog();
     this.destroyVpn();
     this.stopCore();
     this.removeFile(LOCK_FILE);
@@ -85,13 +101,17 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
   }
 
   private async initialize(want: Want): Promise<void> {
-    const state = this.readState(want);
+    let state = this.readState(want);
     if (state === undefined) {
-      this.writeStatus('failed', 'No core start parameters', this.requestId);
-      hilog.warn(DOMAIN, TAG, 'No core start parameters; VPN extension will exit');
+      state = await this.readStoredState();
+    }
+    if (state === undefined) {
+      this.writeStatus('failed', '缺少核心启动参数，且没有可恢复的本地运行状态', this.requestId);
+      hilog.warn(DOMAIN, TAG, 'No valid core start parameters or stored recovery state');
       return;
     }
     this.requestId = state.requestId ?? this.requestId;
+    this.launchState = state;
     this.writeStatus('core_starting', 'Calling OpenP2PStart', this.requestId);
 
     hilog.info(DOMAIN, TAG, 'Calling OpenP2PStart, baseDir=%{public}s, logLevel=%{public}d',
@@ -105,8 +125,11 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
       throw new Error(detail);
     }
 
-    const coreReady = await this.waitForCoreReady();
-    if (!coreReady) {
+    // OpenP2PGetStatus becomes 2 only after RunAsModule has completed
+    // GNetwork.Connect(), so liveness monitoring must not begin before this
+    // server-login gate succeeds.
+    const serverConnected = await this.waitForServerConnected();
+    if (!serverConnected) {
       const nativeError = this.readNativeError();
       const detail = nativeError.length > 0
         ? nativeError
@@ -114,17 +137,18 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
       this.writeStatus('failed', detail, this.requestId);
       throw new Error(detail);
     }
-    this.writeStatus('core_started', 'OpenP2P core is running', this.requestId);
+    this.writeStatus('core_started', '核心已启动，端口映射功能可用', this.requestId);
     this.writeLock(this.requestId);
+    this.startCoreWatchdog();
 
     // ClashBox starts its core first and creates TUN only after a second-stage
     // startClash request. OpenP2P has no local RPC server, so the UI sends the
     // equivalent request through a sandbox file shared by both abilities.
     if (!await this.waitForVpnRequest(this.requestId)) {
-      this.writeStatus('core_started', 'Core is running; VPN interface was not requested', this.requestId);
+      this.writeStatus('core_started', '核心正在运行，未请求创建 SD-WAN 接口', this.requestId);
       return;
     }
-    this.writeStatus('vpn_starting', 'Creating OHOS VPN interface', this.requestId);
+    this.writeStatus('vpn_starting', '正在创建鸿蒙 VPN 接口', this.requestId);
 
     // The first server response can legitimately be {"Nodes":null} when the
     // authenticated node has not been assigned to an SD-WAN yet. Keep the
@@ -143,12 +167,14 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
       throw new Error(`OHOS VPN creation failed: ${JSON.stringify(error)}`);
     }
     hilog.info(DOMAIN, TAG, 'OHOS VPN interface created, fd=%{public}d', this.vpnFd);
-    this.writeStatus('vpn_ready', 'VPN interface created', this.requestId);
+    this.writeStatus('vpn_ready', '核心已连接，SD-WAN 接口已就绪', this.requestId);
     this.readLoop();
     this.writeLoop();
   }
 
   private writeStatus(state: string, message: string, requestId: number = this.requestId): void {
+    this.currentStatusState = state;
+    this.currentStatusMessage = message;
     try {
       const path = `${this.context.filesDir}/${STATUS_FILE}`;
       const file = fileIo.openSync(path, fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
@@ -163,39 +189,87 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     // Token is accepted only from the start request. Never read or modify
     // OpenP2P config.json, and never persist the token in an IPC state file.
     const parameters = want?.parameters;
-    if (parameters !== undefined) {
-      const baseDir = parameters['baseDir'] as string;
-      const token = parameters['token'] as string;
-      const shareBandwidth = parameters['shareBandwidth'] as number;
-      const logLevel = parameters['logLevel'] as number;
-      const requestId = parameters['requestId'] as number;
-      if (baseDir !== undefined && token !== undefined &&
-          baseDir.length > 0 && token.length > 0) {
-        return {
-          baseDir,
-          token,
-          shareBandwidth: shareBandwidth ?? 0,
-          logLevel: logLevel ?? 1,
-          requestId
-        };
-      }
+    if (parameters === undefined || parameters === null) {
+      return undefined;
+    }
+
+    const baseDir = parameters['baseDir'];
+    const token = parameters['token'];
+    const shareBandwidth = parameters['shareBandwidth'];
+    const logLevel = parameters['logLevel'];
+    const requestId = parameters['requestId'];
+    if (typeof baseDir === 'string' && typeof token === 'string' &&
+        baseDir.length > 0 && token.length > 0) {
+      return {
+        baseDir,
+        token,
+        shareBandwidth: typeof shareBandwidth === 'number' ? shareBandwidth : 10,
+        logLevel: typeof logLevel === 'number' ? logLevel : 1,
+        requestId: typeof requestId === 'number' ? requestId : undefined
+      };
     }
 
     return undefined;
   }
 
+  private async readStoredState(): Promise<CoreState | undefined> {
+    const runtimeState = new RuntimeStateStore(this.context);
+    if (!runtimeState.isDesiredRunning()) {
+      return undefined;
+    }
+    try {
+      const token = await new TokenStore().load();
+      if (token.length === 0) {
+        return undefined;
+      }
+      const pendingRequestId = this.readPendingRequestId();
+      hilog.info(DOMAIN, TAG, 'Restoring core parameters from secure local state');
+      return {
+        baseDir: this.context.filesDir,
+        token,
+        shareBandwidth: 10,
+        logLevel: 1,
+        requestId: pendingRequestId > 0 ? pendingRequestId : Date.now()
+      };
+    } catch (error) {
+      hilog.error(DOMAIN, TAG, 'Unable to restore core parameters: %{public}s', JSON.stringify(error));
+      return undefined;
+    }
+  }
+
+  private readPendingRequestId(): number {
+    try {
+      const path = `${this.context.filesDir}/${STATUS_FILE}`;
+      if (!fileIo.accessSync(path)) {
+        return 0;
+      }
+      const status = JSON.parse(fileIo.readTextSync(path)) as Record<string, Object> | null;
+      if (status === null) {
+        return 0;
+      }
+      const requestId = status['requestId'];
+      return typeof requestId === 'number' && requestId > 0 ? requestId : 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   private readRequestIdFromWant(want: Want): number {
-    const value = want.parameters?.['requestId'] as number;
+    const parameters = want.parameters;
+    if (parameters === undefined || parameters === null) {
+      return 0;
+    }
+    const value = parameters['requestId'];
     return typeof value === 'number' && value > 0 ? value : 0;
   }
 
-  private async waitForCoreReady(): Promise<boolean> {
+  private async waitForServerConnected(): Promise<boolean> {
     let nativeState = this.readNativeState();
-    // Older prebuilt libopenp2p_ohos.so files do not expose the status symbol.
-    // Keep the old behavior until the regenerated library is packaged.
+    // Never acknowledge startup or enable the watchdog without a native API
+    // that can prove the server login completed.
     if (nativeState < 0) {
-      hilog.warn(DOMAIN, TAG, 'Native core status API is unavailable; using legacy startup acknowledgement');
-      return true;
+      hilog.error(DOMAIN, TAG, 'Native core status API is unavailable; server connection cannot be verified');
+      return false;
     }
 
     const deadline = Date.now() + 35 * 1000;
@@ -218,6 +292,15 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     } catch (error) {
       hilog.warn(DOMAIN, TAG, 'Unable to read native core state: %{public}s', JSON.stringify(error));
       return -1;
+    }
+  }
+
+  private isNativeCoreRunning(): boolean {
+    try {
+      return coreNative.isCoreRunning();
+    } catch (error) {
+      hilog.warn(DOMAIN, TAG, 'Unable to query native core liveness: %{public}s', JSON.stringify(error));
+      return this.readNativeState() === 2;
     }
   }
 
@@ -299,7 +382,12 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
       const configText = await coreNative.getSdwanConfig();
       let config: SdwanInfo;
       try {
-        config = JSON.parse(configText) as SdwanInfo;
+        const parsed = JSON.parse(configText) as SdwanInfo | null;
+        if (parsed === null) {
+          this.writeStatus('vpn_waiting_config', '核心已连接，正在等待有效的 SD-WAN 配置', this.requestId);
+          continue;
+        }
+        config = parsed;
       } catch (_) {
         throw new Error('OpenP2P returned invalid SD-WAN JSON');
       }
@@ -309,7 +397,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
         return vpnConfig;
       }
 
-      const detail = `Core is online; waiting for node ${nodeName} to be assigned to an enabled SD-WAN`;
+      const detail = `核心已连接，端口映射可用；节点 ${nodeName} 暂未加入 SD-WAN`;
       this.writeStatus('vpn_waiting_config', detail, this.requestId);
       hilog.warn(DOMAIN, TAG, '%{public}s; config=%{public}s', detail, configText);
     }
@@ -449,6 +537,106 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
   private isWouldBlock(error: Object): boolean {
     const serialized = JSON.stringify(error);
     return serialized.includes('13900034') || serialized.includes('13900010');
+  }
+
+  private startCoreWatchdog(): void {
+    if (this.watchdogTimer >= 0) {
+      return;
+    }
+    this.consecutiveCoreFailures = 0;
+    this.watchdogTimer = setInterval((): void => {
+      this.checkCoreLiveness();
+    }, CORE_CHECK_INTERVAL_MS);
+    hilog.info(DOMAIN, TAG, 'Core liveness watchdog started');
+  }
+
+  private stopCoreWatchdog(): void {
+    if (this.watchdogTimer >= 0) {
+      clearInterval(this.watchdogTimer);
+      this.watchdogTimer = -1;
+    }
+  }
+
+  private checkCoreLiveness(): void {
+    if (this.stopping || this.recoveryInProgress) {
+      return;
+    }
+    if (this.isNativeCoreRunning()) {
+      this.consecutiveCoreFailures = 0;
+      // Refresh the timestamp used by the UIAbility to detect whether this
+      // extension process was reclaimed by the system.
+      this.writeStatus(this.currentStatusState, this.currentStatusMessage, this.requestId);
+      return;
+    }
+
+    this.consecutiveCoreFailures++;
+    hilog.warn(DOMAIN, TAG, 'Core liveness check failed %{public}d/%{public}d',
+      this.consecutiveCoreFailures, CORE_FAILURE_THRESHOLD);
+    if (this.consecutiveCoreFailures >= CORE_FAILURE_THRESHOLD) {
+      this.recoverCore().catch((error: Object) => {
+        hilog.error(DOMAIN, TAG, 'Core recovery worker failed: %{public}s', this.formatError(error));
+      });
+    }
+  }
+
+  private async recoverCore(): Promise<void> {
+    if (this.recoveryInProgress || this.stopping || this.launchState === undefined) {
+      return;
+    }
+    this.recoveryInProgress = true;
+    try {
+      const now = Date.now();
+      this.recoveryTimestamps = this.recoveryTimestamps.filter((value: number): boolean =>
+        now - value < RECOVERY_WINDOW_MS);
+      if (this.recoveryTimestamps.length >= MAX_RECOVERIES_PER_WINDOW) {
+        this.exhaustRecovery();
+        return;
+      }
+
+      const attempt = this.recoveryTimestamps.length + 1;
+      const delayIndex = Math.min(attempt - 1, RECOVERY_DELAYS_MS.length - 1);
+      const delay = RECOVERY_DELAYS_MS[delayIndex];
+      this.recoveryTimestamps.push(now);
+      this.writeStatus('core_restarting', `检测到核心已停止，${delay / 1000} 秒后执行第 ${attempt} 次恢复`,
+        this.requestId);
+      await this.sleep(delay);
+      if (this.stopping || this.launchState === undefined) {
+        return;
+      }
+
+      this.stopCore();
+      await this.sleep(250);
+      const state = this.launchState;
+      const started = coreNative.startCore(state.baseDir, state.token, state.shareBandwidth, state.logLevel);
+      if (!started || !await this.waitForServerConnected()) {
+        const detail = this.readNativeError();
+        this.writeStatus('core_restarting',
+          `第 ${attempt} 次核心恢复失败${detail.length > 0 ? `：${detail}` : ''}`, this.requestId);
+        return;
+      }
+
+      this.consecutiveCoreFailures = 0;
+      if (this.vpnFd >= 0) {
+        this.writeStatus('vpn_ready', '核心已自动恢复，SD-WAN 接口继续运行', this.requestId);
+      } else {
+        this.writeStatus('core_started', '核心已自动恢复，端口映射功能可用', this.requestId);
+      }
+      this.writeLock(this.requestId);
+      hilog.info(DOMAIN, TAG, 'Core recovered on attempt %{public}d', attempt);
+    } finally {
+      this.recoveryInProgress = false;
+    }
+  }
+
+  private exhaustRecovery(): void {
+    this.stopping = true;
+    this.stopCoreWatchdog();
+    this.destroyVpn();
+    this.stopCore();
+    this.removeFile(LOCK_FILE);
+    this.removeFile(VPN_REQUEST_FILE);
+    this.writeStatus('recovery_exhausted', '10 分钟内已恢复 5 次，自动恢复暂时停止', this.requestId);
+    hilog.error(DOMAIN, TAG, 'Core recovery limit reached');
   }
 
   private destroyVpn(): void {

@@ -126,6 +126,18 @@ func OpenP2PGetStatus() C.int32_t {
 	return C.int32_t(coreState)
 }
 
+// OpenP2PIsRunning reports whether the core instance is alive. Network
+// reachability, login state, SD-WAN assignment and TUN state are intentionally
+// excluded so a temporary outage or port-forward-only mode is not restarted.
+//
+//export OpenP2PIsRunning
+func OpenP2PIsRunning() C.int32_t {
+	if op2p.IsModuleRunning() {
+		return 1
+	}
+	return 0
+}
+
 // OpenP2PGetLastError copies the last asynchronous startup error into data.
 //
 //export OpenP2PGetLastError

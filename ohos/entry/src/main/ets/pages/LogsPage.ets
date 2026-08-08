@@ -39,6 +39,30 @@ export struct LogsPage {
     }, 0);
   }
 
+  @Builder
+  private emptyState() {
+    Column({ space: 16 }) {
+      SymbolGlyph($r('sys.symbol.doc_text'))
+        .fontSize(48)
+        .fontColor([$r('app.color.text_tertiary')])
+        .opacity(0.6)
+      Column({ space: 6 }) {
+        Text('暂无日志')
+          .fontSize(18)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.empty_title'))
+        Text('启动核心后，日志将在这里实时显示')
+          .fontSize(14)
+          .fontColor($r('app.color.text_tertiary'))
+          .textAlign(TextAlign.Center)
+      }
+    }
+    .layoutWeight(1)
+    .width('100%')
+    .justifyContent(FlexAlign.Center)
+    .padding({ left: 40, right: 40 })
+  }
+
   build() {
     Column({ space: 16 }) {
       Row({ space: 12 }) {
@@ -47,34 +71,30 @@ export struct LogsPage {
         }
         .layoutWeight(1)
 
-        Button('导出日志')
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.accent'))
-          .height(36)
-          .padding({ left: 14, right: 14 })
-          .backgroundColor($r('app.color.accent_soft'))
-          .borderRadius(18)
-          .onClick((): void => this.onExportLog())
+        Button() {
+          Row({ space: 6 }) {
+            SymbolGlyph($r('sys.symbol.share'))
+              .fontSize(16)
+              .fontColor([$r('app.color.accent')])
+            Text('导出')
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.accent'))
+          }
+        }
+        .height(38)
+        .padding({ left: 16, right: 16 })
+        .backgroundColor($r('app.color.accent_soft'))
+        .borderRadius(19)
+        .onClick((): void => this.onExportLog())
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
       if (this.state.logs.length === 0) {
-        Column({ space: 12 }) {
-          Text('暂无日志')
-            .fontSize(18)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.empty_title'))
-          Text('启动核心后，日志将在这里实时显示')
-            .fontSize(14)
-            .fontColor($r('app.color.text_tertiary'))
-        }
-        .layoutWeight(1)
-        .width('100%')
-        .justifyContent(FlexAlign.Center)
+        this.emptyState()
       } else {
-        List({ space: 2, scroller: this.logScroller }) {
+        List({ space: 0, scroller: this.logScroller }) {
           ForEach(this.state.logs, (line: string, index: number) => {
             ListItem() {
               Text(line)
@@ -84,22 +104,22 @@ export struct LogsPage {
                 .fontColor(line.toLowerCase().includes('error') ?
                   $r('app.color.log_error') : $r('app.color.log_text'))
                 .copyOption(CopyOptions.LocalDevice)
-                .padding({ left: 12, right: 12, top: 5, bottom: 5 })
+                .padding({ left: 14, right: 14, top: 6, bottom: 6 })
             }
           }, (line: string, index: number): string => `${index}-${line}`)
         }
         .layoutWeight(1)
         .width('100%')
-        .padding({ top: 8, bottom: 8 })
         .contentEndOffset(104)
         .backgroundColor($r('app.color.log_background'))
         .borderRadius(16)
         .edgeEffect(EdgeEffect.Spring)
+        .shadow({ radius: 12, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 4 })
       }
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 16, right: 16, top: 24, bottom: 24 })
+    .padding({ left: 20, right: 20, top: 24, bottom: 24 })
     .backgroundColor($r('app.color.page_background'))
   }
 }

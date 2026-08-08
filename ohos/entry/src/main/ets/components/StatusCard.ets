@@ -2,7 +2,8 @@ import { CoreUiState } from '../model/CoreUiState';
 
 @Component
 export struct StatusCard {
-  @ObjectLink state: CoreUiState;
+  @ObjectLink @Watch('onStateChanged') state: CoreUiState;
+  @State private pulseScale: number = 1.0;
 
   private title(): string {
     if (this.state.connected) {
@@ -28,6 +29,19 @@ export struct StatusCard {
       return $r('app.color.status_connecting');
     }
     return $r('app.color.status_idle');
+  }
+
+  private symbol(): Resource {
+    if (this.state.connected) {
+      return $r('sys.symbol.checkmark_circle_fill');
+    }
+    if (this.state.coreState === 'failed') {
+      return $r('sys.symbol.xmark_circle_fill');
+    }
+    if (this.state.running || this.state.busy) {
+      return $r('sys.symbol.arrow_clockwise');
+    }
+    return $r('sys.symbol.circle');
   }
 
   private description(): string {
@@ -62,15 +76,48 @@ export struct StatusCard {
     }
   }
 
+  private onStateChanged(): void {
+    if (this.state.running || this.state.busy) {
+      this.startPulse();
+    } else {
+      this.pulseScale = 1.0;
+    }
+  }
+
+  private startPulse(): void {
+    animateTo({
+      duration: 1200,
+      curve: Curve.EaseInOut,
+      iterations: -1,
+      playMode: PlayMode.Alternate
+    }, (): void => {
+      this.pulseScale = 1.25;
+    });
+  }
+
   build() {
-    Row({ space: 12 }) {
-      Circle()
-        .width(14)
-        .height(14)
-        .fill(this.color())
-      Column({ space: 3 }) {
+    Row({ space: 16 }) {
+      Stack() {
+        if (this.state.running || this.state.busy) {
+          Circle()
+            .width(44)
+            .height(44)
+            .fill(Color.Transparent)
+            .stroke(this.color())
+            .strokeWidth(2)
+            .opacity(0.3)
+            .scale({ x: this.pulseScale, y: this.pulseScale })
+        }
+        SymbolGlyph(this.symbol())
+          .fontSize(26)
+          .fontColor([this.color()])
+      }
+      .width(44)
+      .height(44)
+
+      Column({ space: 4 }) {
         Text(this.title())
-          .fontSize(18)
+          .fontSize(19)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
         Text(this.description())
@@ -78,14 +125,15 @@ export struct StatusCard {
           .fontColor($r('app.color.text_secondary'))
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .lineHeight(19)
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
-    .padding(20)
+    .padding({ left: 20, right: 20, top: 22, bottom: 22 })
     .backgroundColor($r('app.color.card_background'))
     .borderRadius(20)
-    .shadow({ radius: 16, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 6 })
+    .shadow({ radius: 20, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 8 })
   }
 }

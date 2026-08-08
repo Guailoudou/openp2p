@@ -152,6 +152,18 @@ static napi_value GetCoreState(napi_env env, napi_callback_info info) {
     return Int32Result(env, getState());
 }
 
+static napi_value IsCoreRunning(napi_env env, napi_callback_info info) {
+    (void)info;
+    auto isRunning = reinterpret_cast<CoreStateFn>(FindCoreSymbol("OpenP2PIsRunning"));
+    if (isRunning != nullptr) {
+        return BooleanResult(env, isRunning() != 0);
+    }
+
+    // Compatibility with an older core library during a staged upgrade.
+    auto getState = reinterpret_cast<CoreStateFn>(FindCoreSymbol("OpenP2PGetStatus"));
+    return BooleanResult(env, getState != nullptr && getState() == 2);
+}
+
 static napi_value GetCoreLastError(napi_env env, napi_callback_info info) {
     (void)info;
     std::string error = lastCoreError;
@@ -309,6 +321,7 @@ static napi_value Init(napi_env env, napi_value exports) {
         {"startCore", nullptr, StartCore, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"getLastError", nullptr, GetLastError, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"getCoreState", nullptr, GetCoreState, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"isCoreRunning", nullptr, IsCoreRunning, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"getCoreLastError", nullptr, GetCoreLastError, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"stopCore", nullptr, StopCore, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"getNodeName", nullptr, GetNodeName, nullptr, nullptr, nullptr, napi_default, nullptr},

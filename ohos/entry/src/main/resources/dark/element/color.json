@@ -21,6 +21,8 @@
     { "name": "status_failed", "value": "#F87171" },
     { "name": "status_connecting", "value": "#FBBF24" },
     { "name": "status_idle", "value": "#71717A" },
-    { "name": "danger", "value": "#EF4444" }
+    { "name": "danger", "value": "#EF4444" },
+    { "name": "accent_shadow", "value": "#33A99BFF" },
+    { "name": "danger_shadow", "value": "#33EF4444" }
   ]
 }

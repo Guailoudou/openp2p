@@ -137,7 +137,8 @@ export class OpenP2PController {
     this.state.coreState = status.state;
     this.state.coreMessage = status.message;
     this.state.running = this.isRunningState(status.state);
-    if (status.state === 'stopped' || status.state === 'not_started' || status.state === 'failed') {
+    if (status.state === 'stopped' || status.state === 'not_started' || status.state === 'failed' ||
+      status.state === 'recovery_exhausted') {
       this.state.connected = false;
     }
   }
@@ -166,7 +167,7 @@ export class OpenP2PController {
 
   private isRunningState(value: string): boolean {
     return value === 'requested' || value === 'starting' || value === 'core_starting' ||
-      value === 'core_started' || value === 'vpn_requested' || value === 'vpn_starting' ||
+      value === 'core_started' || value === 'core_restarting' || value === 'vpn_requested' || value === 'vpn_starting' ||
       value === 'vpn_waiting_config' || value === 'vpn_ready';
   }
 

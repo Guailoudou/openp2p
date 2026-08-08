@@ -30,6 +30,9 @@
         "label": "$string:EntryAbility_label",
         "startWindowIcon": "$media:startIcon",
         "startWindowBackground": "$color:start_window_background",
+        "backgroundModes": [
+          "multiDeviceConnection"
+        ],
         "exported": true,
         "skills": [
           {
