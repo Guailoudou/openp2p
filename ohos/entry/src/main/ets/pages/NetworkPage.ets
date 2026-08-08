@@ -19,6 +19,7 @@ export struct NetworkPage {
     Nodes: []
   };
   @State private loading: boolean = false;
+  @State private refreshing: boolean = false;
   @State private message: string = '';
   @State private showMemberSheet: boolean = false;
   @State private memberName: string = '';
@@ -26,6 +27,7 @@ export struct NetworkPage {
   @State private memberResource: string = '';
   @State private memberConnections: PortMapping[] = [];
   @State private memberTunError: string = '';
+  private refreshInFlight: boolean = false;
   private session: ManagementSession = ManagementSession.getInstance();
 
   aboutToAppear(): void {
@@ -48,6 +50,20 @@ export struct NetworkPage {
       this.message = `加载网络配置失败：${String(error)}`;
     } finally {
       this.loading = false;
+    }
+  }
+
+  private async refreshData(): Promise<void> {
+    if (this.refreshInFlight) {
+      return;
+    }
+    this.refreshInFlight = true;
+    this.refreshing = true;
+    try {
+      await this.loadData();
+    } finally {
+      this.refreshInFlight = false;
+      this.refreshing = false;
     }
   }
 
@@ -334,11 +350,10 @@ export struct NetworkPage {
   }
 
   build() {
-    Scroll() {
-      Column({ space: 16 }) {
-        PageHeader({ title: '网络', subtitle: '管理 SD-WAN 网关、模式与成员' })
-        Button('刷新网络配置')
-          .width('100%').height(42).onClick((): void => { this.loadData(); })
+    Refresh({ refreshing: $$this.refreshing }) {
+      Scroll() {
+        Column({ space: 16 }) {
+          PageHeader({ title: '网络', subtitle: '管理 SD-WAN 网关、模式与成员' })
         if (this.message.length > 0) {
           Text(this.message)
             .width('100%').padding(14).fontSize(14).fontColor($r('app.color.text_secondary'))
@@ -383,7 +398,7 @@ export struct NetworkPage {
               Button('编辑').onClick((): void => { this.openMember(member); })
               Button('移除').fontColor(Color.Red).onClick((): void => { this.removeMember(index); })
             }.width('100%').padding(12).backgroundColor($r('app.color.page_background')).borderRadius(14)
-          }, (member: SdwanMember): string => member.name)
+          }, (member: SdwanMember): string => `${member.name}-${member.ip}-${member.isActive}-${member.resource}`)
         }
         .width('100%').padding(18).backgroundColor($r('app.color.card_background')).borderRadius(18)
 
@@ -399,9 +414,14 @@ export struct NetworkPage {
 
         Button(this.loading ? '正在保存…' : '保存网络配置')
           .width('100%').height(50).enabled(!this.loading).onClick((): void => { this.saveNetwork(); })
+        }
+        .width('100%').padding({ left: 20, right: 20, top: 24, bottom: 128 })
       }
-      .width('100%').padding({ left: 20, right: 20, top: 24, bottom: 128 })
+      .width('100%').height('100%')
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     }
+    .onRefreshing((): void => { this.refreshData(); })
+    .pullToRefresh(true)
     .width('100%').height('100%').backgroundColor($r('app.color.page_background'))
     .bindSheet($$this.showMemberSheet, this.memberSheet(), {
       height: SheetSize.LARGE,

@@ -13,6 +13,7 @@ export struct DevicePage {
   @State private latestVersion: string = '';
   @State private mappings: PortMapping[] = [];
   @State private loading: boolean = false;
+  @State private refreshing: boolean = false;
   @State private message: string = '';
   @State private showSheet: boolean = false;
   @State private sheetMode: string = 'actions';
@@ -33,6 +34,7 @@ export struct DevicePage {
   @State private mappingRelayNode: string = '';
   @State private originalProtocol: string = '';
   @State private originalSourcePort: number = 0;
+  private refreshInFlight: boolean = false;
   private session: ManagementSession = ManagementSession.getInstance();
 
   aboutToAppear(): void {
@@ -82,6 +84,25 @@ export struct DevicePage {
     } finally {
       this.loading = false;
     }
+  }
+
+  private async refreshDevices(): Promise<void> {
+    if (this.refreshInFlight) {
+      return;
+    }
+    this.refreshInFlight = true;
+    this.refreshing = true;
+    try {
+      await this.loadDevices();
+    } finally {
+      this.refreshInFlight = false;
+      this.refreshing = false;
+    }
+  }
+
+  private deviceCardKey(device: ManagementDevice): string {
+    return `${device.name}-${device.remark ? device.remark : ''}-${device.isActive}-${device.os}-` +
+      `${device.version}-${device.lanip}-${device.ip}`;
   }
 
   private openActions(device: ManagementDevice): void {
@@ -618,51 +639,55 @@ export struct DevicePage {
   }
 
   build() {
-    Scroll() {
-      Column({ space: 16 }) {
-        PageHeader({ title: '设备', subtitle: '管理 OpenP2P 设备与端口映射' })
-        Button('刷新设备')
-          .width('100%').height(42).onClick((): void => { this.loadDevices(); })
-        if (this.message.length > 0) {
-          Text(this.message)
-            .width('100%').padding(14).fontSize(14).fontColor($r('app.color.text_secondary'))
-            .backgroundColor($r('app.color.card_background')).borderRadius(14)
+    Refresh({ refreshing: $$this.refreshing }) {
+      Scroll() {
+        Column({ space: 16 }) {
+          PageHeader({ title: '设备', subtitle: '管理 OpenP2P 设备与端口映射' })
+          if (this.message.length > 0) {
+            Text(this.message)
+              .width('100%').padding(14).fontSize(14).fontColor($r('app.color.text_secondary'))
+              .backgroundColor($r('app.color.card_background')).borderRadius(14)
+          }
+          if (this.loading && this.devices.length === 0) {
+            LoadingProgress().width(42).height(42).margin({ top: 48 })
+          } else if (this.devices.length === 0) {
+            Text('暂无设备').fontSize(16).fontColor($r('app.color.text_secondary')).padding(48)
+          } else {
+            ForEach(this.devices, (device: ManagementDevice) => {
+              Column({ space: 12 }) {
+                Row() {
+                  Column({ space: 4 }) {
+                    Text(device.remark ? device.remark : device.name)
+                      .fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
+                    Text(device.name).fontSize(12).fontColor($r('app.color.text_tertiary'))
+                  }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+                  Text(device.isActive === 1 ? '在线' : '离线')
+                    .fontSize(13).fontColor(device.isActive === 1 ? Color.Green : $r('app.color.text_tertiary'))
+                }.width('100%')
+                Row() {
+                  Text(`${device.os} · ${device.version}`).fontSize(13).fontColor($r('app.color.text_secondary'))
+                  Blank()
+                  Text(device.lanip).fontSize(13).fontColor($r('app.color.text_secondary'))
+                }.width('100%')
+                Row() {
+                  Text('公网 IP').fontSize(13).fontColor($r('app.color.text_tertiary'))
+                  Blank()
+                  Text(device.ip).fontSize(13).fontColor($r('app.color.text_secondary'))
+                }.width('100%')
+              }
+              .width('100%').padding(18).backgroundColor($r('app.color.card_background')).borderRadius(18)
+              .shadow({ radius: 12, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 4 })
+              .onClick((): void => { this.openActions(device); })
+            }, (device: ManagementDevice): string => this.deviceCardKey(device))
+          }
         }
-        if (this.loading && this.devices.length === 0) {
-          LoadingProgress().width(42).height(42).margin({ top: 48 })
-        } else if (this.devices.length === 0) {
-          Text('暂无设备').fontSize(16).fontColor($r('app.color.text_secondary')).padding(48)
-        } else {
-          ForEach(this.devices, (device: ManagementDevice) => {
-            Column({ space: 12 }) {
-              Row() {
-                Column({ space: 4 }) {
-                  Text(device.remark ? device.remark : device.name)
-                    .fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
-                  Text(device.name).fontSize(12).fontColor($r('app.color.text_tertiary'))
-                }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-                Text(device.isActive === 1 ? '在线' : '离线')
-                  .fontSize(13).fontColor(device.isActive === 1 ? Color.Green : $r('app.color.text_tertiary'))
-              }.width('100%')
-              Row() {
-                Text(`${device.os} · ${device.version}`).fontSize(13).fontColor($r('app.color.text_secondary'))
-                Blank()
-                Text(device.lanip).fontSize(13).fontColor($r('app.color.text_secondary'))
-              }.width('100%')
-              Row() {
-                Text('公网 IP').fontSize(13).fontColor($r('app.color.text_tertiary'))
-                Blank()
-                Text(device.ip).fontSize(13).fontColor($r('app.color.text_secondary'))
-              }.width('100%')
-            }
-            .width('100%').padding(18).backgroundColor($r('app.color.card_background')).borderRadius(18)
-            .shadow({ radius: 12, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 4 })
-            .onClick((): void => { this.openActions(device); })
-          }, (device: ManagementDevice): string => device.name)
-        }
+        .width('100%').padding({ left: 20, right: 20, top: 24, bottom: 128 })
       }
-      .width('100%').padding({ left: 20, right: 20, top: 24, bottom: 128 })
+      .width('100%').height('100%')
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     }
+    .onRefreshing((): void => { this.refreshDevices(); })
+    .pullToRefresh(true)
     .width('100%').height('100%').backgroundColor($r('app.color.page_background'))
     .bindSheet($$this.showSheet, this.sheetContent(), {
       height: this.sheetMode === 'mappings' || this.sheetMode === 'editMapping' ? SheetSize.LARGE : SheetSize.MEDIUM,
