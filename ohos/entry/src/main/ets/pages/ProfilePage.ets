@@ -1,7 +1,20 @@
+import { bundleManager } from '@kit.AbilityKit';
 import { PageHeader } from '../components/PageHeader';
 
 @Component
 export struct ProfilePage {
+  @State private appVersion: string = '未知';
+
+  aboutToAppear(): void {
+    try {
+      const bundleInfo = bundleManager.getBundleInfoForSelfSync(
+        bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT);
+      this.appVersion = bundleInfo.versionName;
+    } catch (_) {
+      this.appVersion = '未知';
+    }
+  }
+
   @Builder
   private infoRow(label: string, value: string) {
     Row() {
@@ -46,7 +59,7 @@ export struct ProfilePage {
         .borderRadius(20)
 
         Column() {
-          this.infoRow('应用版本', '1.0.0')
+          this.infoRow('应用版本', this.appVersion)
           Divider().color($r('app.color.divider'))
           this.infoRow('运行平台', 'HarmonyOS')
           Divider().color($r('app.color.divider'))
