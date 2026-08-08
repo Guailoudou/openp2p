@@ -53,11 +53,6 @@ export struct TokenCard {
         .borderRadius(12)
         .enabled(!this.state.running && !this.state.busy)
         .onClick((): void => this.onSave())
-
-      Text('Token 通过 Asset Store 加密保存在本机，启动时仅作为参数传入核心，不会写入 config.json')
-        .width('100%')
-        .fontSize(12)
-        .fontColor($r('app.color.text_tertiary'))
     }
     .width('100%')
     .padding(20)

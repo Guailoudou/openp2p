@@ -3,20 +3,62 @@ import { CoreUiState } from '../model/CoreUiState';
 
 @Component
 export struct LogsPage {
-  @ObjectLink state: CoreUiState;
+  @ObjectLink @Watch('onLogStateChanged') state: CoreUiState;
+  onExportLog: () => void = (): void => {};
+  private logScroller: Scroller = new Scroller();
+  private scrollTimer: number = -1;
+
+  aboutToAppear(): void {
+    this.scrollToLatest(false);
+  }
+
+  aboutToDisappear(): void {
+    if (this.scrollTimer >= 0) {
+      clearTimeout(this.scrollTimer);
+      this.scrollTimer = -1;
+    }
+  }
+
+  private onLogStateChanged(): void {
+    this.scrollToLatest(true);
+  }
+
+  private scrollToLatest(smooth: boolean): void {
+    if (this.state.logs.length === 0) {
+      return;
+    }
+    if (this.scrollTimer >= 0) {
+      clearTimeout(this.scrollTimer);
+    }
+    this.scrollTimer = setTimeout((): void => {
+      const lastIndex = this.state.logs.length - 1;
+      if (lastIndex >= 0) {
+        this.logScroller.scrollToIndex(lastIndex, smooth, ScrollAlign.END);
+      }
+      this.scrollTimer = -1;
+    }, 0);
+  }
 
   build() {
     Column({ space: 16 }) {
-      Row() {
-        PageHeader({ title: '日志', subtitle: '实时查看 OpenP2P 核心输出' })
-        Text(`${this.state.logs.length} 行`)
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-          .backgroundColor($r('app.color.badge_background'))
-          .borderRadius(12)
+      Row({ space: 12 }) {
+        Row() {
+          PageHeader({ title: '日志', subtitle: '实时查看 OpenP2P 核心输出' })
+        }
+        .layoutWeight(1)
+
+        Button('导出日志')
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.accent'))
+          .height(36)
+          .padding({ left: 14, right: 14 })
+          .backgroundColor($r('app.color.accent_soft'))
+          .borderRadius(18)
+          .onClick((): void => this.onExportLog())
       }
       .width('100%')
+      .alignItems(VerticalAlign.Center)
 
       if (this.state.logs.length === 0) {
         Column({ space: 12 }) {
@@ -32,7 +74,7 @@ export struct LogsPage {
         .width('100%')
         .justifyContent(FlexAlign.Center)
       } else {
-        List({ space: 2 }) {
+        List({ space: 2, scroller: this.logScroller }) {
           ForEach(this.state.logs, (line: string, index: number) => {
             ListItem() {
               Text(line)

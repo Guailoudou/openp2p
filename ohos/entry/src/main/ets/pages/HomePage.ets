@@ -34,12 +34,6 @@ export struct HomePage {
         .backgroundColor(this.state.running ? $r('app.color.danger') : $r('app.color.accent'))
         .enabled(!this.state.busy)
         .onClick((): void => this.onToggleCore())
-
-        Text('连接成功以核心日志出现 “login ok” 为准')
-          .width('100%')
-          .textAlign(TextAlign.Center)
-          .fontSize(12)
-          .fontColor($r('app.color.text_tertiary'))
       }
       .width('100%')
       .padding({ left: 20, right: 20, top: 24, bottom: 128 })

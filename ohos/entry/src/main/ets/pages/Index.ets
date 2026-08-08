@@ -50,55 +50,63 @@ struct Index {
   }
 
   build() {
-    HdsTabs({ controller: this.tabsController }) {
-      TabContent() {
-        HomePage({
-          state: this.state,
-          onToggleCore: (): void => {
-            this.controller?.toggleCore();
-          },
-          onSaveToken: (): void => {
-            this.controller?.saveToken();
-          }
-        })
-      }
-      .tabBar(this.tabBar($r('sys.symbol.house'), $r('sys.symbol.house_fill'), '主页'))
+    Row(){
+      HdsTabs({ controller: this.tabsController }) {
+        TabContent() {
+          HomePage({
+            state: this.state,
+            onToggleCore: (): void => {
+              this.controller?.toggleCore();
+            },
+            onSaveToken: (): void => {
+              this.controller?.saveToken();
+            }
+          })
+        }
+        .tabBar(this.tabBar($r('sys.symbol.house'), $r('sys.symbol.house_fill'), '主页'))
 
-      TabContent() {
-        LogsPage({ state: this.state })
-      }
-      .tabBar(this.tabBar($r('sys.symbol.doc_text'), $r('sys.symbol.doc_text_fill'), '日志'))
+        TabContent() {
+          LogsPage({
+            state: this.state,
+            onExportLog: (): void => {
+              this.controller?.exportLog();
+            }
+          })
+        }
+        .tabBar(this.tabBar($r('sys.symbol.doc_text'), $r('sys.symbol.doc_text_fill'), '日志'))
 
-      TabContent() {
-        ProfilePage()
+        TabContent() {
+          ProfilePage()
+        }
+        .tabBar(this.tabBar($r('sys.symbol.person'), $r('sys.symbol.person_fill'), '我的'))
       }
-      .tabBar(this.tabBar($r('sys.symbol.person'), $r('sys.symbol.person_fill'), '我的'))
+      .width('100%')
+      .height('100%')
+      .scrollable(false)
+      .barOverlap(true)
+      .vertical(false)
+      .barPosition(BarPosition.End)
+      .onAttach((): void => {
+        try {
+          this.tabsController.preloadItems([0, 1, 2, 3, 4]);
+        } catch (error) {
+          hilog.error(DOMAIN, TAG, 'OnAttach preloadItems failed: %{public}s', JSON.stringify(error));
+        }
+      })
+      .barFloatingStyle({
+        barBottomMargin: this.naviIndicatorHeight > 0 ? this.naviIndicatorHeight :
+          $r('sys.float.padding_level8'),
+        adaptToHandedness: true,
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.ADAPTIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      })
+      .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+      .onChange((index: number): void => {
+        this.selectedTab = index;
+      })
     }
-    .width('100%')
-    .height('100%')
-    .scrollable(false)
-    .barOverlap(true)
-    .vertical(false)
-    .barPosition(BarPosition.End)
-    .onAttach((): void => {
-      try {
-        this.tabsController.preloadItems([0, 1, 2, 3, 4]);
-      } catch (error) {
-        hilog.error(DOMAIN, TAG, 'OnAttach preloadItems failed: %{public}s', JSON.stringify(error));
-      }
-    })
-    .barFloatingStyle({
-      barBottomMargin: this.naviIndicatorHeight > 0 ? this.naviIndicatorHeight :
-        $r('sys.float.padding_level8'),
-      adaptToHandedness: true,
-      systemMaterialEffect: {
-        materialType: hdsMaterial.MaterialType.ADAPTIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-      }
-    })
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .onChange((index: number): void => {
-      this.selectedTab = index;
-    })
+
   }
 }

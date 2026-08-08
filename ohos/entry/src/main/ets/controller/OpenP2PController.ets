@@ -2,6 +2,7 @@ import common from '@ohos.app.ability.common';
 import { promptAction } from '@kit.ArkUI';
 import { CoreUiState } from '../model/CoreUiState';
 import { CoreService, CoreStatus } from '../service/CoreService';
+import { LogExportService } from '../service/LogExportService';
 
 const MAX_VISIBLE_LOG_LINES = 500;
 const MAX_UINT64 = '18446744073709551615';
@@ -9,12 +10,14 @@ const MAX_UINT64 = '18446744073709551615';
 export class OpenP2PController {
   private state: CoreUiState;
   private service: CoreService;
+  private logExportService: LogExportService;
   private pollTimer: number = -1;
   private lastLogText: string = '';
 
   constructor(context: common.UIAbilityContext, state: CoreUiState) {
     this.state = state;
     this.service = new CoreService(context);
+    this.logExportService = new LogExportService(context);
   }
 
   startPolling(): void {
@@ -62,6 +65,17 @@ export class OpenP2PController {
       promptAction.showToast({ message: this.errorMessage(error) });
     } finally {
       this.state.busy = false;
+    }
+  }
+
+  async exportLog(): Promise<void> {
+    try {
+      const exported = await this.logExportService.export();
+      if (exported) {
+        promptAction.showToast({ message: '日志已导出为 openp2p.log' });
+      }
+    } catch (error) {
+      promptAction.showToast({ message: `导出日志失败：${this.errorMessage(error)}` });
     }
   }
 
