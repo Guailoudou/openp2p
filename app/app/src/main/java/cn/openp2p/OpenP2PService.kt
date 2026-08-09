@@ -165,9 +165,10 @@ class OpenP2PService : VpnService() {
         val token = SecureCredentialStore.get(this)
             .migrateLegacy(preferences, KEY_TOKEN, SecureCredentialStore.CORE_TOKEN)
         if (token.isBlank()) { updateState("Token 未设置"); stopSelf(); return }
+        Logger.resetView()
         preferences.edit().putBoolean(KEY_DESIRED_RUNNING, true).apply()
         running = true
-        updateState(if (recovery) "正在恢复" else "正在启动")
+        updateState(if (recovery) "正在恢复核心" else "正在连接服务器")
         coreJob = serviceScope.launch {
             try {
                 network = Openp2p.runAsModuleWithNode(

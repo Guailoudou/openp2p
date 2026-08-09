@@ -7,12 +7,15 @@
     <string name="nav_profile">Profile</string>
     <string name="status_running">Running</string>
     <string name="status_starting">Starting</string>
+    <string name="status_connecting">Connecting</string>
+    <string name="status_recovering">Recovering</string>
     <string name="status_stopping">Stopping</string>
     <string name="status_stopped">Stopped</string>
     <string name="status_error">Connection problem</string>
     <string name="connection_established">Connection established</string>
     <string name="connection_stopped_hint">Start OpenP2P when you are ready to connect.</string>
     <string name="connection_starting_hint">Preparing VPN and establishing the connection…</string>
+    <string name="connection_recovering_hint">Restarting the OpenP2P core…</string>
     <string name="connection_stopping_hint">Closing the connection safely…</string>
     <string name="start_openp2p">Start OpenP2P</string>
     <string name="stop_openp2p">Stop OpenP2P</string>
@@ -163,10 +166,7 @@
     <string name="remove_member_confirm">Remove %1$s from the network?</string>
     <string name="remove">Remove</string>
     <string name="logs_empty">No logs for this run</string>
-    <string name="copy_logs">Copy</string>
-    <string name="clear_logs_view">Clear view</string>
     <string name="auto_scroll">Auto-scroll</string>
-    <string name="logs_copied">Logs copied with sensitive values masked</string>
     <string name="export_logs">Export</string>
     <string name="logs_export_subject">OpenP2P diagnostic logs</string>
     <string name="logs_export_failed">Could not export logs</string>

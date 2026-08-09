@@ -391,7 +391,3 @@ fun Context.swipeActions(
     setViews(content, actions)
     setOnHorizontalSwipeStateChanged(onHorizontalSwipeStateChanged)
 }
-
-fun String.maskSensitive(): String = replace(Regex("(?i)(token|password|authorization)([\\s:=]+)([^\\s,;]+)")) {
-    "${it.groupValues[1]}${it.groupValues[2]}••••••••"
-}

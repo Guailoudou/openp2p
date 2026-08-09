@@ -81,6 +81,12 @@ object Logger {
     fun v(tag: String, message: String) = log("VERBOSE", tag, message)
 
     @Synchronized
+    fun resetView() {
+        sessionOffsets.clear()
+        sessionFiles().forEach { sessionOffsets[it.name] = it.length() }
+    }
+
+    @Synchronized
     fun currentSession(): String = buildString {
         sessionFiles().forEach { file ->
             val content = readTail(file, sessionOffsets[file.name] ?: 0, MAX_VIEW_BYTES)

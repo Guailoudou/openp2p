@@ -127,7 +127,10 @@ class MainActivity : AppCompatActivity() {
 
             val prefs = getSharedPreferences(OpenP2PService.PREFERENCES, MODE_PRIVATE)
             val desired = prefs.getBoolean(OpenP2PService.KEY_DESIRED_RUNNING, false)
-            if (!alive && desired) {
+            val currentState = prefs.getString(OpenP2PService.KEY_STATE, "").orEmpty()
+            val transitionInProgress = currentState.contains("正在启动") ||
+                currentState.contains("正在连接") || currentState.contains("正在恢复")
+            if (!alive && desired && !transitionInProgress) {
                 prefs.edit().putString(OpenP2PService.KEY_STATE, "正在恢复核心").apply()
                 ContextCompat.startForegroundService(
                     this@MainActivity,
@@ -137,6 +140,7 @@ class MainActivity : AppCompatActivity() {
             }
             val state = when {
                 alive -> "核心运行中"
+                desired && transitionInProgress -> currentState
                 desired -> "正在恢复核心"
                 else -> "已停止"
             }
@@ -198,23 +202,30 @@ class MainActivity : AppCompatActivity() {
         val desired = prefs.getBoolean(OpenP2PService.KEY_DESIRED_RUNNING, false)
         val hasError = rawState.contains("error", true) || rawState.contains("fail", true) ||
             rawState.contains("异常") || rawState.contains("失败") || rawState.contains("未运行")
+        val recovering = rawState.contains("正在恢复") || rawState.contains("等待恢复")
+        val connecting = !recovering && (rawState.contains("正在启动") || rawState.contains("正在连接") ||
+            (homeBusy && !desired))
+        val stopping = homeBusy && desired
+        val transitioning = connecting || recovering || stopping
         val heroStatus = when {
             hasError -> AppStatus.ERROR
-            homeBusy -> AppStatus.INFO
+            transitioning -> AppStatus.INFO
             desired -> AppStatus.SUCCESS
             else -> AppStatus.NEUTRAL
         }
         val heroTitle = getString(when {
             hasError -> R.string.status_error
-            homeBusy && desired -> R.string.status_stopping
-            homeBusy -> R.string.status_starting
+            stopping -> R.string.status_stopping
+            recovering -> R.string.status_recovering
+            connecting -> R.string.status_connecting
             desired -> R.string.status_running
             else -> R.string.status_stopped
         })
         val heroDescription = getString(when {
             hasError -> R.string.status_error
-            homeBusy && desired -> R.string.connection_stopping_hint
-            homeBusy -> R.string.connection_starting_hint
+            stopping -> R.string.connection_stopping_hint
+            recovering -> R.string.connection_recovering_hint
+            connecting -> R.string.connection_starting_hint
             desired -> R.string.connection_established
             else -> R.string.connection_stopped_hint
         })
@@ -235,7 +246,7 @@ class MainActivity : AppCompatActivity() {
                 homeBusy = true
                 showHome()
                 if (desired) stopCore() else requestStartCore()
-            }.setLoading(homeBusy, buttonText, getString(R.string.please_wait))
+            }.setLoading(transitioning, buttonText, getString(R.string.please_wait))
         })
 
         body.sectionHeader(getString(R.string.configuration_overview))
@@ -335,10 +346,8 @@ class MainActivity : AppCompatActivity() {
         val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val autoScroll = Switch(this).apply { text = getString(R.string.auto_scroll); isChecked = true }
         controls.addView(autoScroll, LinearLayout.LayoutParams(0, -2, 1f))
-        val copy = MaterialButton(this).apply { text = getString(R.string.copy_logs); minWidth = 0 }
         val export = MaterialButton(this).apply { text = getString(R.string.export_logs); minWidth = 0 }
-        val clear = MaterialButton(this).apply { text = getString(R.string.clear_logs_view); minWidth = 0 }
-        controls.addView(copy); controls.addView(export); controls.addView(clear); body.addView(controls)
+        controls.addView(export); body.addView(controls)
         val logScroll = ScrollView(this)
         val text = TextView(this).apply {
             textSize = 12f
@@ -351,12 +360,6 @@ class MainActivity : AppCompatActivity() {
         }
         logScroll.addView(text)
         body.addView(logScroll, LinearLayout.LayoutParams(-1, dp(440)))
-        clear.setOnClickListener { text.text = "" }
-        copy.setOnClickListener {
-            val safe = text.text.toString().maskSensitive()
-            (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("OpenP2P logs", safe))
-            page.snack(getString(R.string.logs_copied))
-        }
         export.setOnClickListener {
             runCatching {
                 val file = Logger.createExportFile(this)
