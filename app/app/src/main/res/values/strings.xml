@@ -1,43 +1,198 @@
 <resources>
     <string name="app_name">OpenP2P</string>
-    <!-- Strings related to login -->
+    <string name="nav_home">Home</string>
+    <string name="nav_devices">Devices</string>
+    <string name="nav_network">Network</string>
+    <string name="nav_logs">Logs</string>
+    <string name="nav_profile">Profile</string>
+    <string name="status_running">Running</string>
+    <string name="status_starting">Starting</string>
+    <string name="status_stopping">Stopping</string>
+    <string name="status_stopped">Stopped</string>
+    <string name="status_error">Connection problem</string>
+    <string name="connection_established">Connection established</string>
+    <string name="connection_stopped_hint">Start OpenP2P when you are ready to connect.</string>
+    <string name="connection_starting_hint">Preparing VPN and establishing the connection…</string>
+    <string name="connection_stopping_hint">Closing the connection safely…</string>
+    <string name="start_openp2p">Start OpenP2P</string>
+    <string name="stop_openp2p">Stop OpenP2P</string>
+    <string name="please_wait">Please wait…</string>
+    <string name="configuration_overview">Configuration</string>
+    <string name="token_source">Token source</string>
+    <string name="token_source_account">Management account</string>
+    <string name="token_source_local">Local configuration</string>
+    <string name="token_source_missing">Not configured</string>
+    <string name="vpn_permission">VPN permission</string>
+    <string name="vpn_permission_ready">Requested when starting</string>
+    <string name="virtual_network_status">Virtual network</string>
+    <string name="virtual_network_waiting">Waiting for cloud configuration</string>
+    <string name="management_account">Management account</string>
+    <string name="account_signed_in">Signed in</string>
+    <string name="account_signed_out">Not signed in</string>
+    <string name="configure_token">Configure Token</string>
+    <string name="token_help">A Token identifies this device. It is hidden by default.</string>
+    <string name="token_label">OpenP2P Token</string>
+    <string name="save_token">Save Token</string>
+    <string name="invalid_token">Enter a valid numeric Token.</string>
+    <string name="token_saved">Token saved</string>
+    <string name="token_required">Set a Token or sign in to your management account first.</string>
+    <string name="login_management_account">Sign in to management account</string>
+    <string name="common_questions">Help and background operation</string>
+    <string name="first_load">Loading…</string>
+    <string name="retry">Retry</string>
+    <string name="cancel">Cancel</string>
+    <string name="confirm">Confirm</string>
+    <string name="done">Done</string>
+    <string name="no_options">No available options</string>
+    <string name="operation_failed">Operation failed</string>
+    <string name="load_failed">Could not load data</string>
+    <string name="devices_title_count">Devices · %1$d</string>
+    <string name="filter_all">All</string>
+    <string name="filter_online">Online</string>
+    <string name="filter_offline">Offline</string>
+    <string name="online">Online</string>
+    <string name="offline">Offline</string>
+    <string name="upgrade_available">Update</string>
+    <string name="more_actions">More actions for %1$s</string>
+    <string name="unknown_system">Unknown system</string>
+    <string name="unknown_version">Unknown version</string>
+    <string name="device_system_version">%1$s · %2$s</string>
+    <string name="device_addresses">LAN %1$s  ·  Public %2$s</string>
+    <string name="copy_addresses">Long press to copy addresses</string>
+    <string name="addresses_copied">Device addresses copied</string>
+    <string name="no_devices_title">No devices yet</string>
+    <string name="no_devices_message">Add a device in the management console and it will appear here.</string>
+    <string name="open_management_console">Open management console</string>
+    <string name="port_mappings">Port mappings</string>
+    <string name="edit_device">Edit device</string>
+    <string name="upgrade_client">Upgrade client</string>
+    <string name="restart_device">Restart device</string>
+    <string name="delete_device">Delete device</string>
+    <string name="device_name">Device name</string>
+    <string name="bandwidth_mbps">Bandwidth (Mbps)</string>
+    <string name="public_port">Public port</string>
+    <string name="force_ipv6">Force IPv6</string>
+    <string name="save_changes">Save changes</string>
+    <string name="device_name_required">Enter a device name.</string>
+    <string name="save_success">Saved</string>
+    <string name="device_not_upgradeable">This device cannot be upgraded.</string>
+    <string name="upgrade_confirm">Upgrade %1$s from %2$s to %3$s? The connection may be interrupted.</string>
+    <string name="upgrade">Upgrade</string>
+    <string name="upgrade_sent">Upgrade request sent</string>
+    <string name="restart_confirm">Restart %1$s remotely? Its connection will be interrupted temporarily.</string>
+    <string name="restart">Restart</string>
+    <string name="restart_sent">Restart request sent</string>
+    <string name="delete_confirm">Delete %1$s? This cannot be undone.</string>
+    <string name="delete">Delete</string>
+    <string name="device_deleted">Device deleted</string>
+    <string name="no_mappings">No port mappings</string>
+    <string name="new_mapping">New port mapping</string>
+    <string name="edit_mapping">Edit port mapping</string>
+    <string name="unnamed_mapping">Unnamed mapping</string>
+    <string name="mapping_route">%1$s  %2$d → %3$s:%4$d</string>
+    <string name="enabled">Enabled</string>
+    <string name="disabled">Disabled</string>
+    <string name="edit">Edit</string>
+    <string name="mapping_delete_confirm">Delete mapping %1$s?</string>
+    <string name="mapping_deleted">Mapping deleted</string>
+    <string name="mapping_status_updated">Mapping status updated</string>
+    <string name="mapping_name">Mapping name</string>
+    <string name="protocol">Protocol</string>
+    <string name="local_port">Local port</string>
+    <string name="remote_device">Remote device</string>
+    <string name="select_value">Select</string>
+    <string name="remote_address">Remote address</string>
+    <string name="remote_port">Remote port</string>
+    <string name="access_whitelist">Access whitelist</string>
+    <string name="punch_priority">Punch priority</string>
+    <string name="priority_default">Default</string>
+    <string name="priority_tcp_first">TCP first</string>
+    <string name="priority_tcp_only">TCP only</string>
+    <string name="priority_udp_only">UDP only</string>
+    <string name="relay_node">Relay node</string>
+    <string name="not_specified">Not specified</string>
+    <string name="check_remote_service">Check remote service</string>
+    <string name="remote_check_invalid">Choose a remote device and enter a valid address and port.</string>
+    <string name="remote_reachable">Remote service is reachable</string>
+    <string name="mapping_invalid">Complete the mapping name, device, and valid ports.</string>
+    <string name="mapping_saved">Mapping saved</string>
+    <string name="network_overview">Network overview</string>
+    <string name="network_address">Network address</string>
+    <string name="network_mode">Mode</string>
+    <string name="network_mode_fullmesh">Full mesh</string>
+    <string name="network_mode_central">Central node</string>
+    <string name="member_count">Members</string>
+    <string name="network_health">Health</string>
+    <string name="network_ready">Ready</string>
+    <string name="edit_network_config">Edit network configuration</string>
+    <string name="central_node">Central node</string>
+    <string name="force_relay">Force relay</string>
+    <string name="save_network_config">Save network configuration</string>
+    <string name="network_address_required">Enter a network address.</string>
+    <string name="network_address_invalid">Use an IPv4 CIDR address, for example 10.0.0.0/24.</string>
+    <string name="central_node_required">Select a central node.</string>
+    <string name="network_saved">Network configuration saved</string>
+    <string name="network_members">Network members</string>
+    <string name="no_members">No devices have joined this network.</string>
+    <string name="add_device">Add device</string>
+    <string name="no_eligible_device">No eligible device. A device must be online, version 3.13 or later, and not already a member.</string>
+    <string name="network_member">Network member</string>
+    <string name="virtual_ip">Virtual IP</string>
+    <string name="resources">Resources</string>
+    <string name="check_status">Check status</string>
+    <string name="device_offline">The device is offline.</string>
+    <string name="node_healthy">The node is healthy.</string>
+    <string name="check_failed">Check failed</string>
+    <string name="save_member">Save member</string>
+    <string name="virtual_ip_invalid">Enter a valid IPv4 address.</string>
+    <string name="virtual_ip_conflict">This virtual IP is already in use.</string>
+    <string name="virtual_ip_outside_network">The virtual IP must be inside the configured network.</string>
+    <string name="remove_from_network">Remove from network</string>
+    <string name="remove_member_confirm">Remove %1$s from the network?</string>
+    <string name="remove">Remove</string>
+    <string name="logs_empty">No logs for this run</string>
+    <string name="copy_logs">Copy</string>
+    <string name="clear_logs_view">Clear view</string>
+    <string name="auto_scroll">Auto-scroll</string>
+    <string name="logs_copied">Logs copied with sensitive values masked</string>
+    <string name="export_logs">Export</string>
+    <string name="logs_export_subject">OpenP2P diagnostic logs</string>
+    <string name="logs_export_failed">Could not export logs</string>
+    <string name="account_description">Sign in to show device and network management.</string>
+    <string name="services_support">Services &amp; support</string>
+    <string name="about">About</string>
+    <string name="about_description">OpenP2P Android client</string>
+    <string name="management_console">Management console</string>
+    <string name="management_console_description">Open console.openpxp.com</string>
+    <string name="username">Account</string>
+    <string name="password">Password</string>
+    <string name="sign_in_save">Sign in and save</string>
+    <string name="signing_in">Signing in…</string>
+    <string name="login_success">Signed in</string>
+    <string name="login_failed">Sign-in failed</string>
+    <string name="email">Email</string>
+    <string name="phone">Phone</string>
+    <string name="registration_time">Registered</string>
+    <string name="masked_token">••••••••%1$s</string>
+    <string name="copy_token">Copy Token</string>
+    <string name="token_copied_warning">Token copied. Treat it as a sensitive credential.</string>
+    <string name="sign_out">Sign out</string>
+    <string name="sign_out_confirm">Signing out hides the Devices and Network pages. Continue?</string>
+    <string name="open_source_description">An open-source, lightweight peer-to-peer networking tool.</string>
+    <string name="version_format">Version %1$s (%2$d)</string>
+    <string name="close">Close</string>
     <string name="prompt_email">Email</string>
     <string name="prompt_password">Password</string>
-    <string name="action_sign_in">登录</string>
-    <string name="action_sign_in_short">Sign in</string>
-    <string name="welcome">"Welcome !"</string>
-    <string name="invalid_username">Not a valid username</string>
-    <string name="invalid_password">Token可以在 https://console.openp2p.cn/profile 获得</string>
-    <string name="login_failed">"Login failed"</string>
-    <string name="phone_setting">"安卓系统默认设置的”杀后台进程“会导致 OpenP2P 在后台运行一会后，被系统杀死进程，导致您的体验受到影响。您可以通过以下方式修改几个设置，解决此问题：
-华为鸿蒙：
-    1. 允许应用后台运行：进入设置 → 搜索进入 应用启动管理 → 关闭 OpenP2P 的 自动管理 开关 → 在弹框中勾选 允许后台活动 
-    2. 避免应用被电池优化程序清理：进入设置 → 搜索进入电池优化 → 不允许 →选择所有应用 → 找到无法后台运行的应用 → 设置为不允许
-    3. 关闭省电模式：进入设置 → 电池 → 关闭 省电模式 开关
-    4. 保持设备网络连接：进入设置  → 电池 → 更多电池设置 → 开启 休眠时始终保持网络连接 开关。
-    5. 给后台运行的应用加锁：打开应用后 → 进入多任务界面 → 下拉选中的卡片进行加锁 → 然后点击清理图标清理其他不经常使用的应用
-    6. 设置开发人员选项中相关开关：进入设置 → 搜索进入 开发人员选项 → 找到 不保留活动 开关后关闭 → 并在 后台进程限制 选择 标准限制
-    
-华为手机：
-    进入”设置“，搜索并进入“电池优化“界面，选中 OpenP2P 程序，不允许系统对其进行电池优化；
-    进入”设置“，进入”应用管理“界面，选中 OpenP2P 程序，点击”耗电情况“，开启”允许后台活动“即可；
-
-小米手机：
-    进入”设置“，进入”更多应用“界面，选中 OpenP2P 程序，点击”省电策略“，设置为”无限制“；
-    进入”设置“，进入”特色功能“界面，选中”游戏加速“，将其关闭即可；
-
-OPPO手机：
-进入”设置“，进入”应用管理“界面，选中 OpenP2P 程序，点击”耗电保护“，关闭所有设置项即可；
-
-VIVO手机：
-进入”设置“，进入”电池“界面，点击”后台高耗电“，将 OpenP2P 设为允许高耗电时继续运行即可；
-
-魅族手机：
-进入”设置“，进入”应用管理“界面，选中 OpenP2P 程序，点击”权限管理“，点击”后台管理“，选择”允许后台运行“即可；
-
-一加手机：
-进入”设置“，进入”电池“界面，点击”电池优化“，将 OpenP2P 设为”不优化“即可；
-
-三星手机：
-进入”智能管理器“，进入”应用程序管理“界面，点击”管理自动运行“，将 OpenP2P 设为”允许后台运行“即可；"</string>
+    <string name="action_sign_in">Start</string>
+    <string name="action_sign_in_short">Start</string>
+    <string name="welcome">Welcome!</string>
+    <string name="invalid_username">Enter a valid Token.</string>
+    <string name="invalid_password">Get a Token from the OpenP2P management console.</string>
+    <string name="phone_setting">To keep OpenP2P running reliably, allow background activity and exclude it from battery optimization in system settings.</string>
+    <string name="request_battery_exemption">Allow unrestricted battery use</string>
+    <string name="open_autostart_settings">Open auto-start settings</string>
+    <string name="open_app_settings">Open application settings</string>
+    <string name="no_browser_available">No browser is available.</string>
+    <string name="open_console_for_token">Open console to get Token</string>
+    <string name="status_not_running">Stopped</string>
 </resources>

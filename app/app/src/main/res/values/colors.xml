@@ -1,10 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
+    <color name="brand_primary">#0A59F7</color>
+    <color name="brand_primary_dark">#0645C8</color>
+    <color name="brand_on_primary">#FFFFFF</color>
+    <color name="surface_page">#F5F7FA</color>
+    <color name="surface_card">#FFFFFF</color>
+    <color name="surface_subtle">#EEF3FA</color>
+    <color name="border_default">#E3E8EF</color>
+    <color name="text_primary">#182431</color>
+    <color name="text_secondary">#637083</color>
+    <color name="state_success">#16855B</color>
+    <color name="state_warning">#B86700</color>
+    <color name="state_error">#C9362B</color>
+    <color name="state_info">#0A59F7</color>
+    <color name="log_surface">#F9FAFC</color>
+    <color name="transparent">#00000000</color>
+
+    <!-- Compatibility aliases retained for older screens. -->
+    <color name="purple_200">#8CB4FF</color>
+    <color name="purple_500">@color/brand_primary</color>
+    <color name="purple_700">@color/brand_primary_dark</color>
+    <color name="teal_200">#5DD6A5</color>
+    <color name="teal_700">@color/state_success</color>
+    <color name="black">#000000</color>
+    <color name="white">#FFFFFF</color>
+    <color name="harmony_blue">@color/brand_primary</color>
+    <color name="page_background">@color/surface_page</color>
+    <color name="card_background">@color/surface_card</color>
+    <color name="success">@color/state_success</color>
+    <color name="danger">@color/state_error</color>
 </resources>

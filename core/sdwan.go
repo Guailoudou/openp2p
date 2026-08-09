@@ -321,20 +321,23 @@ func handleSDWAN(subType uint16, msg []byte) error {
 			return ErrMsgFormat
 		}
 		gLog.i("sdwan init:%s", prettyJson(rsp))
+		previous := gConf.getSDWAN()
 		// GNetwork.sdwan.detail = &rsp
-		if gConf.Network.previousIP != gConf.Network.publicIP || gConf.getSDWAN().CentralNode != rsp.CentralNode || gConf.getSDWAN().Gateway != rsp.Gateway {
+		if gConf.Network.previousIP != gConf.Network.publicIP || previous.CentralNode != rsp.CentralNode || previous.Gateway != rsp.Gateway || previous.Enable != rsp.Enable {
 			GNetwork.sdwan.reset()
-			preAndroidSDWANConfig = "" // let androind app reset vpnservice
+			preAndroidSDWANConfig = "" // let android app reset VpnService
 		}
 		gConf.setSDWAN(rsp)
 		if isAndroid() {
-			if !compareResources(preAndroidSDWANConfig, string(msg[openP2PHeaderSize:])) { // when config change, notify android app
-				select {
-				case AndroidSDWANConfig <- msg[openP2PHeaderSize:]:
-				default:
-				}
+			currentConfig := string(msg[openP2PHeaderSize:])
+			if !compareAndroidSDWANConfig(preAndroidSDWANConfig, currentConfig) {
+				notifyAndroidSDWANConfig(msg[openP2PHeaderSize:])
 				preAndroidSDWANConfig = string(msg[openP2PHeaderSize:])
 			}
+		}
+		if rsp.Enable == 0 {
+			gLog.i("sdwan disabled by remote config")
+			return nil
 		}
 		err = GNetwork.sdwan.init()
 		if err != nil {
@@ -351,32 +354,34 @@ func handleSDWAN(subType uint16, msg []byte) error {
 	return err
 }
 
-// for android vpnservice
-func compareResources(json1, json2 string) bool {
+// Compare every field that can affect Android's VpnService.
+func compareAndroidSDWANConfig(json1, json2 string) bool {
 	var net1, net2 SDWANInfo
 	if err := json.Unmarshal([]byte(json1), &net1); err != nil {
-		fmt.Println("Error parsing json1:", err)
-		fmt.Println("Error parsing json1:", string(json1))
 		return false
 	}
 	if err := json.Unmarshal([]byte(json2), &net2); err != nil {
-		fmt.Println("Error parsing json2:", err)
-		fmt.Println("Error parsing json1:", string(json2))
 		return false
 	}
 
 	// 获取所有资源并比较
-	resources1 := getResources(net1)
-	resources2 := getResources(net2)
-	return reflect.DeepEqual(resources1, resources2)
+	return reflect.DeepEqual(net1, net2)
 }
 
-func getResources(network SDWANInfo) []string {
-	var resources []string
-	for _, node := range network.Nodes {
-		if node.Resource != "" {
-			resources = append(resources, node.Resource)
-		}
+// Keep the newest cloud state if Android is briefly busy rebuilding its TUN.
+func notifyAndroidSDWANConfig(config []byte) {
+	configCopy := append([]byte(nil), config...)
+	select {
+	case AndroidSDWANConfig <- configCopy:
+		return
+	default:
 	}
-	return resources
+	select {
+	case <-AndroidSDWANConfig:
+	default:
+	}
+	select {
+	case AndroidSDWANConfig <- configCopy:
+	default:
+	}
 }
