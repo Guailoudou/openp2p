@@ -117,20 +117,29 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
             mode.check(if (draft.mode == "central") central.id else full.id)
             addView(mode)
             var centralNode = draft.centralNode
-            val centralButton = secondaryAction("${activity.getString(R.string.central_node)} · ${centralNode.ifBlank { activity.getString(R.string.not_specified) }}") {}
-            fun updateCentralVisibility() { centralButton.visibility = if (mode.checkedRadioButtonId == central.id) View.VISIBLE else View.GONE }
-            centralButton.setOnClickListener {
-                val options = devices.filter { eligible(it) }
-                activity.wheelPicker(activity.getString(R.string.central_node), options.map { it.remark.ifBlank { it.name } }, options.indexOfFirst { it.name == centralNode }.coerceAtLeast(0)) {
-                    centralNode = options[it].name
-                    centralButton.text = "${activity.getString(R.string.central_node)} · $centralNode"
-                }
-            }
-            mode.setOnCheckedChangeListener { _, _ -> updateCentralVisibility() }
-            updateCentralVisibility()
+            val centralButton = secondaryAction("") {}
             sectionHeader(activity.getString(R.string.force_relay))
             val relay = Switch(activity).apply { text = activity.getString(R.string.force_relay); textSize = 16f; isChecked = draft.forceRelay != 0; minHeight = activity.dp(48) }
             addView(relay)
+            fun updateModeControls() {
+                val label = activity.getString(
+                    if (mode.checkedRadioButtonId == central.id) R.string.central_node else R.string.specified_relay_node
+                )
+                centralButton.text = "$label · ${centralNode.ifBlank { activity.getString(R.string.not_specified) }}"
+                relay.visibility = if (mode.checkedRadioButtonId == central.id) View.GONE else View.VISIBLE
+            }
+            centralButton.setOnClickListener {
+                val options = devices.filter { eligible(it) }
+                val label = activity.getString(
+                    if (mode.checkedRadioButtonId == central.id) R.string.central_node else R.string.specified_relay_node
+                )
+                activity.wheelPicker(label, options.map { it.remark.ifBlank { it.name } }, options.indexOfFirst { it.name == centralNode }.coerceAtLeast(0)) {
+                    centralNode = options[it].name
+                    centralButton.text = "$label · $centralNode"
+                }
+            }
+            mode.setOnCheckedChangeListener { _, _ -> updateModeControls() }
+            updateModeControls()
             val priorities = activity.punchPriorityOptions()
             var priority = draft.punchPriority.coerceIn(0, priorities.lastIndex)
             val priorityButton = secondaryAction("${activity.getString(R.string.punch_priority)} · ${priorities[priority]}") {}
@@ -144,7 +153,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                 if (centralMode && centralNode.isBlank()) { view.snack(activity.getString(R.string.central_node_required)); return@setOnClickListener }
                 draft.gateway = address
                 draft.mode = if (centralMode) "central" else "fullmesh"
-                draft.centralNode = if (centralMode) centralNode else ""
+                draft.centralNode = centralNode
                 draft.forceRelay = if (relay.isChecked) 1 else 0
                 draft.punchPriority = priority
                 persistConfig(draft.snapshot(), save) {

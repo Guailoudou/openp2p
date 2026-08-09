@@ -20,21 +20,14 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.collect
 import org.json.JSONObject
 import java.io.File
 import java.net.InetAddress
 import java.net.NetworkInterface
 import kotlinx.coroutines.Dispatchers
-
-data class Node(val name: String, val ip: String, val resource: String? = null)
-
-
-data class Network(
-    val id: Long,
-    val name: String,
-    val gateway: String,
-    val Nodes: List<Node>
-)
 
 class OpenP2PService : VpnService() {
     companion object {
@@ -47,6 +40,45 @@ class OpenP2PService : VpnService() {
         const val KEY_DESIRED_RUNNING = "desired_running"
         const val KEY_STATE = "state"
         const val KEY_TUN_STATE = "tun_state"
+        const val KEY_VPN_PERMISSION_REQUIRED = "vpn_permission_required"
+
+        // getAndroidSDWANConfig() is a blocking native call and cannot be
+        // cancelled by destroying a Service coroutine. Keep exactly one
+        // process-wide reader and fan its results out to the active service.
+        private val configReaderScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private val configEvents = MutableSharedFlow<String>(
+            replay = 0,
+            extraBufferCapacity = 1,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST
+        )
+        private val configReaderLock = Any()
+        @Volatile private var configReaderJob: Job? = null
+
+        private fun ensureConfigReader() {
+            synchronized(configReaderLock) {
+                if (configReaderJob?.isActive == true) return
+                configReaderJob = configReaderScope.launch {
+                    Logger.i(LOG_TAG, "Process-wide SD-WAN configuration reader started")
+                    while (isActive) {
+                        val configText = try {
+                            val buffer = ByteArray(32 * 1024)
+                            val length = Openp2p.getAndroidSDWANConfig(buffer)
+                            if (length <= 0 || length > buffer.size.toLong()) {
+                                Logger.w(LOG_TAG, "Ignored invalid SD-WAN config length: $length")
+                                delay(1000)
+                                continue
+                            }
+                            buffer.copyOfRange(0, length.toInt()).decodeToString()
+                        } catch (error: Throwable) {
+                            Logger.e(LOG_TAG, "Failed while waiting for SD-WAN config", error)
+                            delay(1000)
+                            continue
+                        }
+                        configEvents.emit(configText)
+                    }
+                }
+            }
+        }
     }
 
     inner class LocalBinder : Binder() {
@@ -66,6 +98,7 @@ class OpenP2PService : VpnService() {
     private var watchdogJob: Job? = null
     private val recoveryTimes = ArrayDeque<Long>()
     private var recoveryIndex = 0
+    @Volatile private var lastSdwanConfig: JSONObject? = null
 
     override fun onCreate() {
         val logDir = File(getExternalFilesDir(null), "log")
@@ -109,7 +142,10 @@ class OpenP2PService : VpnService() {
     }
 
     private fun startOpenP2P(recovery: Boolean = false) {
-        if (coreJob?.isActive == true || running) return
+        if (coreJob?.isActive == true || running) {
+            retryTunFromLastConfig()
+            return
+        }
         val preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE)
         val token = SecureCredentialStore.get(this)
             .migrateLegacy(preferences, KEY_TOKEN, SecureCredentialStore.CORE_TOKEN)
@@ -122,6 +158,7 @@ class OpenP2PService : VpnService() {
                 network = Openp2p.runAsModuleWithNode(
                     getExternalFilesDir(null).toString(), token, deviceNodeCandidate(), 0, 1
                 )
+                Logger.i(LOG_TAG, "核心登录成功，当前节点=${Openp2p.getAndroidNodeName()}")
                 updateState("核心运行中")
                 startWatchdog()
             } catch (e: Throwable) {
@@ -192,41 +229,29 @@ class OpenP2PService : VpnService() {
 
     private fun refreshSDWAN() {
         if (configJob?.isActive == true) return
-        configJob = serviceScope.launch {
+        configJob = serviceScope.launch(start = CoroutineStart.UNDISPATCHED) {
             Logger.i(LOG_TAG, "SD-WAN configuration listener started")
-            while (isActive) {
-                val config = try {
-                    val buf = ByteArray(32 * 1024)
-                    val length = Openp2p.getAndroidSDWANConfig(buf)
-                    if (length <= 0 || length > buf.size.toLong()) {
-                        Logger.w(LOG_TAG, "Ignored invalid SD-WAN config length: $length")
-                        delay(1000)
-                        continue
-                    }
-                    buf.copyOfRange(0, length.toInt())
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Throwable) {
-                    Logger.e(LOG_TAG, "Failed while waiting for SD-WAN config", e)
-                    delay(1000)
-                    continue
-                }
-
+            configEvents.collect { configText ->
                 val json = try {
-                    JSONObject(config.decodeToString())
+                    JSONObject(configText)
                 } catch (e: Exception) {
                     Logger.e(LOG_TAG, "Ignored malformed SD-WAN config", e)
-                    continue
+                    return@collect
                 }
 
+                lastSdwanConfig = JSONObject(json.toString())
                 stopTunAndJoin()
-                if (json.optInt("enable", 0) != 1) {
+                // Match HarmonyOS semantics: cloud configurations do not always
+                // include enable. Only an explicit zero disables TUN; otherwise
+                // gateway, Nodes and local-node membership decide readiness.
+                if (json.optInt("enable", 1) == 0) {
                     updateTunState("云端已关闭虚拟网络")
-                    continue
+                    return@collect
                 }
                 sdwanJob = serviceScope.launch { runSDWAN(json) }
             }
         }
+        ensureConfigReader()
     }
 
     private suspend fun stopTunAndJoin() {
@@ -252,6 +277,18 @@ class OpenP2PService : VpnService() {
         getSharedPreferences(PREFERENCES, MODE_PRIVATE).edit().putString(KEY_TUN_STATE, state).apply()
         sendBroadcast(Intent(ACTION_STATUS_CHANGED).setPackage(packageName))
         Logger.i(LOG_TAG, "TUN: $state")
+    }
+
+    private fun updateVpnPermissionRequired(required: Boolean) {
+        getSharedPreferences(PREFERENCES, MODE_PRIVATE).edit()
+            .putBoolean(KEY_VPN_PERMISSION_REQUIRED, required).apply()
+        sendBroadcast(Intent(ACTION_STATUS_CHANGED).setPackage(packageName))
+    }
+
+    private fun retryTunFromLastConfig() {
+        if (vpnInterface != null || sdwanJob?.isActive == true) return
+        val config = lastSdwanConfig ?: return
+        sdwanJob = serviceScope.launch { runSDWAN(JSONObject(config.toString())) }
     }
 
     private suspend fun readTunLoop(descriptor: ParcelFileDescriptor) {
@@ -299,17 +336,30 @@ class OpenP2PService : VpnService() {
 //        }
         Logger.i(LOG_TAG, "Applying SD-WAN config: $jsonObject")
         try {
+            if (VpnService.prepare(this) != null) {
+                updateVpnPermissionRequired(true)
+                updateTunState("VPN 授权已失效，请返回应用重新授权")
+                return
+            }
+            updateVpnPermissionRequired(false)
             val builder = Builder()
             // debug sdwan info
             // val jsonObject = JSONObject("""{"id":2817104318517097000,"name":"network1","gateway":"10.2.3.254/24","mode":"central","centralNode":"nanjin-192-168-0-82","enable":1,"tunnelNum":3,"mtu":1420,"Nodes":[{"name":"192-168-24-15","ip":"10.2.3.5"},{"name":"Alpine Linux-172.16","ip":"10.2.3.14","resource":"172.16.0.0/24"},{"name":"ctdeMacBook-Pro.local","ip":"10.2.3.22"},{"name":"dengjiandeMBP.sh.chaitin.net","ip":"10.2.3.32"},{"name":"DESKTOP-WIN11-ARM-self","ip":"10.2.3.19"},{"name":"eastdeMBP.sh.chaitin.net","ip":"10.2.3.3"},{"name":"FN-NAS-HP","ip":"10.2.3.1","resource":"192.168.100.0/24"},{"name":"huangruideMBP.sh.chaitin.net","ip":"10.2.3.30"},{"name":"iStoreOS-virtual-machine","ip":"10.2.3.12"},{"name":"k30s-redmi-10.2.33","ip":"10.2.3.27"},{"name":"lincheng-MacBook-Pro-3.sh.chaitin.net","ip":"10.2.3.15"},{"name":"localhost-mi-13","ip":"10.2.3.8"},{"name":"localhost-华为matepad11","ip":"10.2.3.13"},{"name":"luzhanwendeMacBook-Pro.local","ip":"10.2.3.17"},{"name":"Mi-pad2-local","ip":"10.2.3.9"},{"name":"nanjin-192-168-0-82","ip":"10.2.3.34"},{"name":"R7000P-2021","ip":"10.2.3.7"},{"name":"tanxiaolongsMBP.sh.chaitin.net","ip":"10.2.3.20"},{"name":"TUF-AX3000_V2-3804","ip":"10.2.3.25"},{"name":"WIN-CYZ-10.2.3.16","ip":"10.2.3.16"},{"name":"WODOUYAO","ip":"10.2.3.4"},{"name":"Zstrack01","ip":"10.2.3.51","resource":"192.168.24.0/22,192.168.20.0/24"},{"name":"小米14-localhost","ip":"10.2.3.23"}]}""")
-            val id = jsonObject.getLong("id")
-            val mtu = jsonObject.getInt("mtu")
-            val name = jsonObject.getString("name")
-            val gateway = jsonObject.getString("gateway")
+            val configuredMtu = jsonObject.optInt("mtu", 1420)
+            val mtu = if (configuredMtu > 0) configuredMtu else 1420
+            val gateway = jsonObject.optString("gateway", "").trim()
+            if (gateway.isEmpty()) {
+                updateTunState("核心已连接，等待有效的 SD-WAN 网关配置")
+                return
+            }
             val gatewayNetwork = getNetworkAddress(gateway)
                 ?: throw IllegalArgumentException("Invalid gateway: $gateway")
             val addressPrefix = gatewayNetwork.second
-            val nodesArray = jsonObject.getJSONArray("Nodes")
+            val nodesArray = jsonObject.optJSONArray("Nodes")
+            if (nodesArray == null) {
+                updateTunState("核心已连接，等待有效的 SD-WAN 节点配置")
+                return
+            }
 
             val nodesList = mutableListOf<JSONObject>()
             for (i in 0 until nodesArray.length()) {
@@ -321,9 +371,13 @@ class OpenP2PService : VpnService() {
             val localIps = getLocalIpAndSubnet()
             Logger.i(OpenP2PService.LOG_TAG, "getAndroidNodeName:${myNodeName}");
             var hasCurrentNodeAddress = false
-            val nodeList = nodesList.map {
-                val nodeName = it.getString("name")
-                val nodeIp = it.getString("ip")
+            nodesList.forEach {
+                val nodeName = it.optString("name", "").trim()
+                val nodeIp = it.optString("ip", "").trim()
+                if (nodeName.isEmpty() || nodeIp.isEmpty()) {
+                    Logger.w(LOG_TAG, "Skipped malformed SD-WAN node: $it")
+                    return@forEach
+                }
                 if (nodeName == myNodeName) {
                     try {
                         Logger.i(LOG_TAG, "Attempting to add address: $nodeIp/$addressPrefix")
@@ -335,8 +389,8 @@ class OpenP2PService : VpnService() {
                         throw e // or handle gracefully
                     }
                 }
-                val nodeResource = it.optString("resource", null)
-                if (!nodeResource.isNullOrEmpty()) {
+                val nodeResource = it.optString("resource", "")
+                if (nodeResource.isNotEmpty()) {
                     // 可能是多个网段，用逗号分隔
                     val resourceList = nodeResource.split(",")
                     for (resource in resourceList) {
@@ -363,30 +417,39 @@ class OpenP2PService : VpnService() {
                     }
                 }
 
-                Node(nodeName, nodeIp, nodeResource)
             }
 
-            val network = Network(id, name, gateway, nodeList)
             if (!hasCurrentNodeAddress) {
-                updateTunState("当前设备未加入虚拟网络")
+                val cloudNodeNames = nodesList.mapNotNull {
+                    it.optString("name", "").trim().takeIf(String::isNotEmpty)
+                }
+                Logger.w(
+                    LOG_TAG,
+                    "当前核心节点未加入 SD-WAN：local=$myNodeName, cloud=$cloudNodeNames"
+                )
+                updateTunState("当前节点 $myNodeName 未加入虚拟网络")
                 return
             }
-            println(network)
-            Logger.i(OpenP2PService.LOG_TAG, "onBind");
-            builder.addDnsServer("119.29.29.29")
-            builder.addDnsServer("2400:3200::1") // alicloud dns v6 & v4
+            listOf("119.29.29.29", "2400:3200::1").forEach { dnsServer ->
+                try {
+                    builder.addDnsServer(dnsServer)
+                } catch (error: Exception) {
+                    Logger.w(LOG_TAG, "Skipped unsupported DNS server $dnsServer: ${error.message}")
+                }
+            }
             // builder.addRoute("10.2.3.0", 24)
 //            builder.addRoute("0.0.0.0", 0);
             val (netIp, prefix) = gatewayNetwork
             builder.addRoute(netIp, prefix)
             Logger.i(LOG_TAG, "Added route from gateway: $netIp/$prefix")
 
-            builder.setSession(LOG_TAG!!)
+            builder.setSession(LOG_TAG)
             builder.setMtu(mtu)
             val descriptor = builder.establish()
                 ?: throw IllegalStateException("VpnService.Builder.establish returned null")
             vpnInterface = descriptor
             sdwanRunning = true
+            updateVpnPermissionRequired(false)
             updateTunState("虚拟网络运行中")
 
             val byteArrayWrite = ByteArray(4096)
@@ -518,7 +581,9 @@ fun getLocalIpAndSubnet(): List<Pair<String, Int>> {
                 val address = interfaceAddress.address
                 val prefixLength = interfaceAddress.networkPrefixLength
                 if (address is InetAddress) {
-                    localIps.add(Pair(address.hostAddress, prefixLength.toInt()))
+                    address.hostAddress?.let { host ->
+                        localIps.add(Pair(host, prefixLength.toInt()))
+                    }
                 }
             }
         }

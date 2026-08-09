@@ -316,8 +316,8 @@ func handleSDWAN(subType uint16, msg []byte) error {
 	var err error
 	switch subType {
 	case MsgSDWANInfoRsp:
-		rsp := SDWANInfo{}
-		if err = json.Unmarshal(msg[openP2PHeaderSize:], &rsp); err != nil {
+		rsp, decodeErr := decodeSDWANInfo(msg[openP2PHeaderSize:])
+		if decodeErr != nil {
 			return ErrMsgFormat
 		}
 		gLog.i("sdwan init:%s", prettyJson(rsp))
@@ -354,13 +354,21 @@ func handleSDWAN(subType uint16, msg []byte) error {
 	return err
 }
 
+// The cloud omits enable for active networks. Only an explicit zero disables SD-WAN.
+func decodeSDWANInfo(data []byte) (SDWANInfo, error) {
+	info := SDWANInfo{Enable: 1}
+	err := json.Unmarshal(data, &info)
+	return info, err
+}
+
 // Compare every field that can affect Android's VpnService.
 func compareAndroidSDWANConfig(json1, json2 string) bool {
-	var net1, net2 SDWANInfo
-	if err := json.Unmarshal([]byte(json1), &net1); err != nil {
+	net1, err := decodeSDWANInfo([]byte(json1))
+	if err != nil {
 		return false
 	}
-	if err := json.Unmarshal([]byte(json2), &net2); err != nil {
+	net2, err := decodeSDWANInfo([]byte(json2))
+	if err != nil {
 		return false
 	}
 

@@ -233,18 +233,26 @@ class MainActivity : AppCompatActivity() {
         body.sectionHeader(getString(R.string.configuration_overview))
         body.addView(card {
             val token = coreToken(prefs)
+            val vpnPermissionRequired = prefs.getBoolean(OpenP2PService.KEY_VPN_PERMISSION_REQUIRED, false)
             keyValue(getString(R.string.token_source), getString(when {
                 session.authenticated -> R.string.token_source_account
                 token.isNotBlank() -> R.string.token_source_local
                 else -> R.string.token_source_missing
             }))
-            keyValue(getString(R.string.vpn_permission), getString(R.string.vpn_permission_ready))
+            keyValue(getString(R.string.vpn_permission), getString(if (vpnPermissionRequired) {
+                R.string.vpn_permission_required
+            } else {
+                R.string.vpn_permission_ready
+            }))
             keyValue(
                 getString(R.string.virtual_network_status),
                 prefs.getString(OpenP2PService.KEY_TUN_STATE, getString(R.string.virtual_network_waiting))
                     ?: getString(R.string.virtual_network_waiting)
             )
             keyValue(getString(R.string.management_account), getString(if (session.authenticated) R.string.account_signed_in else R.string.account_signed_out))
+            if (vpnPermissionRequired) {
+                secondaryAction(getString(R.string.reauthorize_vpn)) { requestStartCore() }
+            }
         })
 
         if (!session.authenticated) {
@@ -280,13 +288,17 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val prepare = VpnService.prepare(this)
+        prefs.edit().putBoolean(OpenP2PService.KEY_VPN_PERMISSION_REQUIRED, prepare != null).apply()
         if (prepare != null) startActivityForResult(prepare, VPN_REQUEST) else startCore()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == VPN_REQUEST) {
-            if (resultCode == Activity.RESULT_OK) startCore() else {
+            val granted = resultCode == Activity.RESULT_OK
+            getSharedPreferences(OpenP2PService.PREFERENCES, MODE_PRIVATE).edit()
+                .putBoolean(OpenP2PService.KEY_VPN_PERMISSION_REQUIRED, !granted).apply()
+            if (granted) startCore() else {
                 homeBusy = false
                 showHome()
             }

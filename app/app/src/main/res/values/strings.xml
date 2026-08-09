@@ -24,6 +24,8 @@
     <string name="token_source_missing">Not configured</string>
     <string name="vpn_permission">VPN permission</string>
     <string name="vpn_permission_ready">Requested when starting</string>
+    <string name="vpn_permission_required">Authorization required</string>
+    <string name="reauthorize_vpn">Authorize VPN again</string>
     <string name="virtual_network_status">Virtual network</string>
     <string name="virtual_network_waiting">Waiting for cloud configuration</string>
     <string name="management_account">Management account</string>
@@ -126,6 +128,7 @@
     <string name="network_ready">Ready</string>
     <string name="edit_network_config">Edit network configuration</string>
     <string name="central_node">Central node</string>
+    <string name="specified_relay_node">Specified relay node</string>
     <string name="force_relay">Force relay</string>
     <string name="save_network_config">Save network configuration</string>
     <string name="network_address_required">Enter a network address.</string>
