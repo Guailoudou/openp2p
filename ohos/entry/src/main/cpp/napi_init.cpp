@@ -9,6 +9,7 @@ namespace {
 
 using ConfigFn = int32_t (*)(unsigned char *, int32_t);
 using StartFn = int32_t (*)(char *, char *, int64_t, int64_t);
+using StartWithNodeFn = int32_t (*)(char *, char *, char *, int64_t, int64_t);
 using StopFn = void (*)();
 using CoreStateFn = int32_t (*)();
 using CoreErrorFn = int32_t (*)(char *, int32_t);
@@ -103,32 +104,35 @@ static napi_value Add(napi_env env, napi_callback_info info) {
 
 static napi_value StartCore(napi_env env, napi_callback_info info) {
     lastCoreError.clear();
-    size_t argc = 4;
-    napi_value args[4] = {nullptr};
-    if (napi_get_cb_info(env, info, &argc, args, nullptr, nullptr) != napi_ok || argc < 4) {
+    size_t argc = 5;
+    napi_value args[5] = {nullptr};
+    if (napi_get_cb_info(env, info, &argc, args, nullptr, nullptr) != napi_ok || argc < 5) {
         return BooleanResult(env, false);
     }
 
     std::string baseDir;
     std::string token;
+    std::string node;
     int64_t shareBandwidth = 0;
     int64_t logLevel = 1;
     if (!ReadString(env, args[0], baseDir) || !ReadString(env, args[1], token) ||
-        napi_get_value_int64(env, args[2], &shareBandwidth) != napi_ok ||
-        napi_get_value_int64(env, args[3], &logLevel) != napi_ok) {
+        !ReadString(env, args[2], node) ||
+        napi_get_value_int64(env, args[3], &shareBandwidth) != napi_ok ||
+        napi_get_value_int64(env, args[4], &logLevel) != napi_ok) {
         SetCoreError("Invalid OpenP2PStart arguments");
         return BooleanResult(env, false);
     }
 
-    auto start = reinterpret_cast<StartFn>(FindCoreSymbol("OpenP2PStart"));
+    auto start = reinterpret_cast<StartWithNodeFn>(FindCoreSymbol("OpenP2PStartWithNode"));
     if (start == nullptr) {
         if (lastCoreError.empty()) {
-            SetCoreError("Unable to load OpenP2PStart from libopenp2p_ohos.so");
+            SetCoreError("Unable to load OpenP2PStartWithNode from libopenp2p_ohos.so");
         }
         return BooleanResult(env, false);
     }
     const int32_t started = start(const_cast<char *>(baseDir.c_str()),
                                   const_cast<char *>(token.c_str()),
+                                  const_cast<char *>(node.c_str()),
                                   shareBandwidth, logLevel);
     if (started == 0) {
         SetCoreError("OpenP2PStart returned 0");

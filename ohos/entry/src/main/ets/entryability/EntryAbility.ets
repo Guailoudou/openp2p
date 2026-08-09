@@ -29,6 +29,10 @@ export default class EntryAbility extends UIAbility {
         hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
         return;
       }
+      this.coreService?.initializePictureInPicture(windowStage.getMainWindowSync().getUIContext())
+        .catch((error: Object): void => {
+          hilog.warn(DOMAIN, 'testTag', 'PiP initialization unavailable: %{public}s', JSON.stringify(error));
+        });
       hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
     });
   }
@@ -39,12 +43,15 @@ export default class EntryAbility extends UIAbility {
 
   onForeground(): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
-    this.coreService?.recoverIfNeeded().catch((error: Object) => {
-      hilog.error(DOMAIN, 'testTag', 'Automatic core recovery failed: %{public}s', JSON.stringify(error));
+    this.coreService?.onAppForeground().catch((error: Object) => {
+      hilog.warn(DOMAIN, 'testTag', 'Foreground core check failed: %{public}s', JSON.stringify(error));
     });
   }
 
   onBackground(): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
+    this.coreService?.onAppBackground().catch((error: Object) => {
+      hilog.warn(DOMAIN, 'testTag', 'Unable to start PiP on background: %{public}s', JSON.stringify(error));
+    });
   }
 }

@@ -69,6 +69,7 @@ export struct NetworkPage {
 
   private availableDevices(): ManagementDevice[] {
     return this.devices.filter((device: ManagementDevice): boolean =>
+      device.isActive === 1 && this.compareVersion(device.version, '3.13.0') >= 0 &&
       !this.config.Nodes.some((member: SdwanMember): boolean => member.name === device.name));
   }
 
@@ -114,8 +115,10 @@ export struct NetworkPage {
       this.message = '当前网段没有可用虚拟 IP';
       return;
     }
-    this.config.Nodes.push({ name: device.name, ip: ip, resource: '', isActive: device.isActive });
+    const member: SdwanMember = { name: device.name, ip: ip, resource: '', isActive: device.isActive };
+    this.config.Nodes.push(member);
     this.refreshConfig();
+    this.openMember(member);
   }
 
   private showAddDevicePicker(): void {
@@ -168,13 +171,20 @@ export struct NetworkPage {
     });
   }
 
-  private removeMember(index: number): void {
+  private async removeMember(index: number): Promise<void> {
+    const removed = this.config.Nodes[index];
     const removedName = this.config.Nodes[index].name;
+    const previousCentralNode = this.config.centralNode;
     this.config.Nodes.splice(index, 1);
     if (this.config.centralNode === removedName) {
       this.config.centralNode = '';
     }
     this.refreshConfig();
+    if (!await this.saveNetwork()) {
+      this.config.Nodes.splice(index, 0, removed);
+      this.config.centralNode = previousCentralNode;
+      this.refreshConfig();
+    }
   }
 
   private updateGateway(value: string): void {
@@ -208,28 +218,41 @@ export struct NetworkPage {
     }
   }
 
-  private saveMember(): void {
+  private async saveMember(): Promise<void> {
     if (!this.isValidIpv4(this.memberIp) || !this.isIpInGateway(this.memberIp, this.config.gateway)) {
       this.message = '虚拟 IP 无效或不在当前网段中';
       return;
     }
+    if (this.config.Nodes.some((item: SdwanMember): boolean =>
+      item.name !== this.memberName && item.ip === this.memberIp)) {
+      this.message = '该虚拟 IP 已被其他网络成员使用';
+      return;
+    }
     const member = this.config.Nodes.find((item: SdwanMember): boolean => item.name === this.memberName);
     if (member) {
+      const previousIp = member.ip;
+      const previousResource = member.resource;
       member.ip = this.memberIp;
       member.resource = this.memberResource;
       this.refreshConfig();
+      if (!await this.saveNetwork()) {
+        member.ip = previousIp;
+        member.resource = previousResource;
+        this.refreshConfig();
+        return;
+      }
     }
     this.showMemberSheet = false;
   }
 
-  private async saveNetwork(): Promise<void> {
+  private async saveNetwork(): Promise<boolean> {
     if (!this.isValidCidr(this.config.gateway)) {
       this.message = '网关必须使用正确的 IPv4/CIDR 格式';
-      return;
+      return false;
     }
     if (this.config.mode === 'central' && this.config.centralNode.length === 0) {
       this.message = '中心组网模式必须选择中心节点';
-      return;
+      return false;
     }
     this.loading = true;
     try {
@@ -237,13 +260,15 @@ export struct NetworkPage {
       for (let index = 0; index < this.config.Nodes.length; index++) {
         const member = this.config.Nodes[index];
         const edge = this.edgeServer(member.name);
-        if (edge.length > 0) {
+        if (member.isActive === 1 && edge.length > 0) {
           await this.session.api.refreshSdwanNode(member.name, edge);
         }
       }
       this.message = '网络配置已保存并下发';
+      return true;
     } catch (error) {
       this.message = `保存网络失败：${String(error)}`;
+      return false;
     } finally {
       this.loading = false;
     }

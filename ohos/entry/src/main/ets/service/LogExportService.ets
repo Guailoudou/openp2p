@@ -1,8 +1,8 @@
 import common from '@ohos.app.ability.common';
 import { fileIo, picker } from '@kit.CoreFileKit';
 
-const LOG_FILE = 'log/openp2p.log';
-const EXPORT_FILE_NAME = 'openp2p.log';
+const LOG_FILES: string[] = ['log/openp2p.log', 'log/openp2p.log.0'];
+const EXPORT_FILE_NAME = 'openp2p-diagnostics.log';
 
 export class LogExportService {
   private context: common.UIAbilityContext;
@@ -12,8 +12,9 @@ export class LogExportService {
   }
 
   async export(): Promise<boolean> {
-    const sourcePath = `${this.context.filesDir}/${LOG_FILE}`;
-    if (!fileIo.accessSync(sourcePath)) {
+    const availableFiles = LOG_FILES.filter((relativePath: string): boolean =>
+      fileIo.accessSync(`${this.context.filesDir}/${relativePath}`));
+    if (availableFiles.length === 0) {
       throw new Error('暂无可导出的日志文件');
     }
 
@@ -27,18 +28,22 @@ export class LogExportService {
       return false;
     }
 
-    const sourceFile = fileIo.openSync(sourcePath, fileIo.OpenMode.READ_ONLY);
+    let diagnostics = `OpenP2P HarmonyOS diagnostics\nGenerated: ${new Date().toISOString()}\n`;
+    availableFiles.forEach((relativePath: string): void => {
+      const sourcePath = `${this.context.filesDir}/${relativePath}`;
+      const name = relativePath.substring(relativePath.lastIndexOf('/') + 1);
+      diagnostics += `\n===== ${name} =====\n${this.maskSensitive(fileIo.readTextSync(sourcePath))}`;
+    });
+    const destinationFile = fileIo.openSync(result[0], fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.TRUNC);
     try {
-      const destinationFile = fileIo.openSync(result[0],
-        fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.TRUNC);
-      try {
-        fileIo.copyFileSync(sourceFile.fd, destinationFile.fd);
-      } finally {
-        fileIo.closeSync(destinationFile.fd);
-      }
+      fileIo.writeSync(destinationFile.fd, diagnostics);
     } finally {
-      fileIo.closeSync(sourceFile.fd);
+      fileIo.closeSync(destinationFile.fd);
     }
     return true;
+  }
+
+  private maskSensitive(value: string): string {
+    return value.replace(/(token|password|authorization)(\s*[:=]\s*)[^\s,;}]+/gi, '$1$2*******');
   }
 }

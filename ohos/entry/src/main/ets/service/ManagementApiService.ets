@@ -173,7 +173,23 @@ export class ManagementApiService {
         const emptyResult: ApiResult = {};
         return emptyResult as T;
       }
-      return JSON.parse(text) as T;
+      const parsed = JSON.parse(text) as Record<string, Object>;
+      const businessError = parsed['error'];
+      let businessErrorCode = 0;
+      if (typeof businessError === 'number') {
+        businessErrorCode = businessError;
+      } else if (typeof businessError === 'boolean') {
+        businessErrorCode = businessError ? 1 : 0;
+      } else if (typeof businessError === 'string' && businessError.length > 0) {
+        const parsedCode = Number(businessError);
+        businessErrorCode = Number.isNaN(parsedCode) ? 1 : parsedCode;
+      }
+      if (businessErrorCode !== 0) {
+        const detailValue = parsed['message'] ? parsed['message'] : parsed['msg'];
+        const detail = typeof detailValue === 'string' && detailValue.length > 0 ? `: ${detailValue}` : '';
+        throw new Error(`管理服务操作失败 (${businessErrorCode})${detail}`);
+      }
+      return parsed as T;
     } finally {
       request.destroy();
     }

@@ -2,7 +2,9 @@ import common from '@ohos.app.ability.common';
 import { fileIo } from '@kit.CoreFileKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import vpnExtension from '@ohos.net.vpnExtension';
-import { BackgroundKeepAliveService } from './BackgroundKeepAliveService';
+import { BackgroundKeepAliveOptions, BackgroundKeepAliveService } from './BackgroundKeepAliveService';
+import { BackgroundLocationService } from './BackgroundLocationService';
+import { PictureInPictureKeepAliveService } from './PictureInPictureKeepAliveService';
 import { RuntimeStateStore } from './RuntimeStateStore';
 import { TokenStore } from './TokenStore';
 
@@ -12,6 +14,7 @@ const VPN_ABILITY = 'OplVpnExtensionAbility';
 const STATUS_FILE = 'opl_core_status.json';
 const LOCK_FILE = 'vpn_ipc.lock';
 const VPN_REQUEST_FILE = 'opl_vpn_request.json';
+const CORE_CHECK_REQUEST_FILE = 'opl_core_check_request';
 const LOG_FILE = 'log/openp2p.log';
 const HEARTBEAT_STALE_MS = 35 * 1000;
 const RECOVERY_COOLDOWN_MS = 10 * 60 * 1000;
@@ -37,11 +40,14 @@ export class CoreService {
   private tokenStore: TokenStore = new TokenStore();
   private runtimeStateStore: RuntimeStateStore;
   private backgroundKeepAlive: BackgroundKeepAliveService;
+  private backgroundLocation: BackgroundLocationService;
+  private pictureInPicture: PictureInPictureKeepAliveService = PictureInPictureKeepAliveService.getInstance();
 
   constructor(context: common.UIAbilityContext) {
     this.context = context;
     this.runtimeStateStore = new RuntimeStateStore(context);
     this.backgroundKeepAlive = new BackgroundKeepAliveService(context);
+    this.backgroundLocation = new BackgroundLocationService(context);
   }
 
   get filesDir(): string {
@@ -87,6 +93,81 @@ export class CoreService {
     return this.tokenStore.save(token);
   }
 
+  isBackgroundKeepAliveEnabled(): boolean {
+    return this.runtimeStateStore.isBackgroundKeepAliveEnabled();
+  }
+
+  isSimulatedLocationEnabled(): boolean {
+    return this.runtimeStateStore.isSimulatedLocationEnabled();
+  }
+
+  isSimulatedDownloadEnabled(): boolean {
+    return this.runtimeStateStore.isSimulatedDownloadEnabled();
+  }
+
+  isPictureInPictureEnabled(): boolean {
+    return this.runtimeStateStore.isPictureInPictureEnabled();
+  }
+
+  async setBackgroundKeepAliveEnabled(enabled: boolean): Promise<boolean> {
+    this.runtimeStateStore.setBackgroundKeepAliveEnabled(enabled);
+    if (!this.isCoreActive()) {
+      return true;
+    }
+    return this.applyBackgroundStrategies();
+  }
+
+  async setSimulatedLocationEnabled(enabled: boolean): Promise<boolean> {
+    this.runtimeStateStore.setSimulatedLocationEnabled(enabled);
+    const available = !enabled || await this.backgroundLocation.requestPermission();
+    if (!enabled) {
+      this.backgroundLocation.stop();
+    }
+    if (this.isCoreActive()) {
+      await this.applyBackgroundStrategies();
+    }
+    return available;
+  }
+
+  async setSimulatedDownloadEnabled(enabled: boolean): Promise<boolean> {
+    this.runtimeStateStore.setSimulatedDownloadEnabled(enabled);
+    const available = !enabled || await this.backgroundKeepAlive.requestNotificationPermission();
+    if (this.isCoreActive()) {
+      await this.applyBackgroundStrategies();
+    }
+    return available;
+  }
+
+  async initializePictureInPicture(uiContext: UIContext): Promise<boolean> {
+    const available = await this.pictureInPicture.initialize(uiContext, this.context);
+    this.pictureInPicture.setEnabled(available && this.runtimeStateStore.isPictureInPictureEnabled() &&
+      this.isCoreActive());
+    return available;
+  }
+
+  async setPictureInPictureEnabled(enabled: boolean, uiContext: UIContext): Promise<boolean> {
+    this.runtimeStateStore.setPictureInPictureEnabled(enabled);
+    const available = !enabled || await this.pictureInPicture.initialize(uiContext, this.context);
+    this.pictureInPicture.setEnabled(enabled && available && this.isCoreActive());
+    return available;
+  }
+
+  async onAppForeground(): Promise<void> {
+    await this.pictureInPicture.stopForForeground();
+    if (!this.runtimeStateStore.isDesiredRunning()) {
+      this.removeFile(CORE_CHECK_REQUEST_FILE);
+      return;
+    }
+    this.writeText(CORE_CHECK_REQUEST_FILE, String(Date.now()));
+    await this.recoverIfNeeded();
+  }
+
+  async onAppBackground(): Promise<void> {
+    if (this.isCoreActive() && this.runtimeStateStore.isPictureInPictureEnabled()) {
+      await this.pictureInPicture.startForBackground();
+    }
+  }
+
   async start(token: string): Promise<void> {
     await this.saveToken(token);
     this.runtimeStateStore.setDesiredRunning(true);
@@ -104,6 +185,7 @@ export class CoreService {
     this.removeFile(STATUS_FILE);
     this.removeFile(LOCK_FILE);
     this.removeFile(VPN_REQUEST_FILE);
+    this.removeFile(CORE_CHECK_REQUEST_FILE);
     this.writeStatus('requested', '正在请求启动 VPN 扩展');
 
     try {
@@ -134,12 +216,12 @@ export class CoreService {
     const status = this.readStatus();
     if (status.state === 'vpn_ready' || status.state === 'vpn_waiting_config' ||
       status.state === 'vpn_requested' || status.state === 'vpn_starting') {
-      await this.backgroundKeepAlive.start();
+      await this.applyBackgroundStrategies();
       return;
     }
     this.writeText(VPN_REQUEST_FILE, JSON.stringify({ action: 'start', requestId: this.requestId }));
     this.writeStatus('vpn_requested', '正在请求创建 VPN 网络接口');
-    await this.backgroundKeepAlive.start();
+    await this.applyBackgroundStrategies();
   }
 
   async stop(): Promise<void> {
@@ -156,6 +238,8 @@ export class CoreService {
     this.removeFile(LOCK_FILE);
     this.removeFile(VPN_REQUEST_FILE);
     this.writeStatus('stopped', '核心已停止');
+    this.backgroundLocation.stop();
+    this.pictureInPicture.setEnabled(false);
     await this.backgroundKeepAlive.stop();
   }
 
@@ -167,7 +251,7 @@ export class CoreService {
     const status = this.readStatus();
     const age = status.timestamp > 0 ? Date.now() - status.timestamp : Number.MAX_SAFE_INTEGER;
     if (this.isRunningState(status.state) && age <= HEARTBEAT_STALE_MS) {
-      await this.backgroundKeepAlive.start();
+      await this.applyBackgroundStrategies();
       return false;
     }
     if (status.state === 'recovery_exhausted' && age < RECOVERY_COOLDOWN_MS) {
@@ -202,6 +286,25 @@ export class CoreService {
       await this.sleep(250);
     }
     return false;
+  }
+
+  private async applyBackgroundStrategies(): Promise<boolean> {
+    const locationEnabled = this.runtimeStateStore.isSimulatedLocationEnabled();
+    this.pictureInPicture.setEnabled(this.runtimeStateStore.isPictureInPictureEnabled());
+    const options: BackgroundKeepAliveOptions = {
+      continuousTask: this.runtimeStateStore.isBackgroundKeepAliveEnabled(),
+      simulatedLocation: locationEnabled,
+      simulatedDownload: this.runtimeStateStore.isSimulatedDownloadEnabled()
+    };
+    const continuousTaskAvailable = await this.backgroundKeepAlive.configure(options);
+    // A location subscription created before the location continuous task is
+    // active is treated as foreground-only and is suspended in background.
+    const locationAvailable = locationEnabled ?
+      continuousTaskAvailable && this.backgroundLocation.start() : true;
+    if (!locationEnabled) {
+      this.backgroundLocation.stop();
+    }
+    return continuousTaskAvailable && locationAvailable;
   }
 
   private hasHandshake(requestId: number): boolean {
@@ -264,6 +367,15 @@ export class CoreService {
     return value === 'requested' || value === 'starting' || value === 'core_starting' ||
       value === 'core_started' || value === 'core_restarting' || value === 'vpn_requested' ||
       value === 'vpn_starting' || value === 'vpn_waiting_config' || value === 'vpn_ready';
+  }
+
+  private isCoreActive(): boolean {
+    const status = this.readStatus();
+    const age = status.timestamp > 0 ? Date.now() - status.timestamp : Number.MAX_SAFE_INTEGER;
+    const activeState = status.state === 'core_started' || status.state === 'core_restarting' ||
+      status.state === 'vpn_requested' || status.state === 'vpn_starting' ||
+      status.state === 'vpn_waiting_config' || status.state === 'vpn_ready';
+    return activeState && age <= HEARTBEAT_STALE_MS;
   }
 
   private sleep(milliseconds: number): Promise<void> {

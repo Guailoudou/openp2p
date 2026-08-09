@@ -25,6 +25,10 @@ struct Index {
   @State private managementEmail: string = '';
   @State private managementPhone: string = '';
   @State private managementAddTime: string = '';
+  @State private backgroundKeepAliveEnabled: boolean = true;
+  @State private simulatedLocationEnabled: boolean = false;
+  @State private simulatedDownloadEnabled: boolean = false;
+  @State private pictureInPictureEnabled: boolean = false;
   private controller?: OpenP2PController;
   private tabsController: HdsTabsController = new HdsTabsController();
   private managementSession: ManagementSession = ManagementSession.getInstance();
@@ -32,6 +36,13 @@ struct Index {
   aboutToAppear(): void {
     const context = getContext(this) as common.UIAbilityContext;
     this.controller = new OpenP2PController(context, this.state);
+    this.backgroundKeepAliveEnabled = this.controller.isBackgroundKeepAliveEnabled();
+    this.simulatedLocationEnabled = this.controller.isSimulatedLocationEnabled();
+    this.simulatedDownloadEnabled = this.controller.isSimulatedDownloadEnabled();
+    this.pictureInPictureEnabled = this.controller.isPictureInPictureEnabled();
+    this.controller.initializePictureInPicture(this.getUIContext()).catch((error: Object): void => {
+      hilog.warn(DOMAIN, TAG, 'Unable to initialize PiP: %{public}s', JSON.stringify(error));
+    });
     this.controller.startPolling();
     this.updateNaviIndicatorHeight(context);
     this.initializeManagement();
@@ -116,6 +127,38 @@ struct Index {
     this.managementAddTime = profile.addtime ? profile.addtime : '';
   }
 
+  private async setBackgroundKeepAliveEnabled(enabled: boolean): Promise<boolean> {
+    const changed = await this.controller?.setBackgroundKeepAliveEnabled(enabled) === true;
+    if (changed) {
+      this.backgroundKeepAliveEnabled = enabled;
+    }
+    return changed;
+  }
+
+  private async setSimulatedLocationEnabled(enabled: boolean): Promise<boolean> {
+    const changed = await this.controller?.setSimulatedLocationEnabled(enabled) === true;
+    if (changed) {
+      this.simulatedLocationEnabled = enabled;
+    }
+    return changed;
+  }
+
+  private async setSimulatedDownloadEnabled(enabled: boolean): Promise<boolean> {
+    const changed = await this.controller?.setSimulatedDownloadEnabled(enabled) === true;
+    if (changed) {
+      this.simulatedDownloadEnabled = enabled;
+    }
+    return changed;
+  }
+
+  private async setPictureInPictureEnabled(enabled: boolean): Promise<boolean> {
+    const changed = await this.controller?.setPictureInPictureEnabled(enabled, this.getUIContext()) === true;
+    if (changed) {
+      this.pictureInPictureEnabled = enabled;
+    }
+    return changed;
+  }
+
   build() {
     Row(){
       HdsTabs({ controller: this.tabsController }) {
@@ -161,9 +204,21 @@ struct Index {
             managementEmail: this.managementEmail,
             managementPhone: this.managementPhone,
             managementAddTime: this.managementAddTime,
+            backgroundKeepAliveEnabled: this.backgroundKeepAliveEnabled,
+            simulatedLocationEnabled: this.simulatedLocationEnabled,
+            simulatedDownloadEnabled: this.simulatedDownloadEnabled,
+            pictureInPictureEnabled: this.pictureInPictureEnabled,
             onSaveManagementCredentials: async (username: string, password: string): Promise<boolean> =>
               this.saveManagementCredentials(username, password),
-            onClearManagementCredentials: async (): Promise<void> => this.clearManagementCredentials()
+            onClearManagementCredentials: async (): Promise<void> => this.clearManagementCredentials(),
+            onBackgroundKeepAliveChange: async (enabled: boolean): Promise<boolean> =>
+              this.setBackgroundKeepAliveEnabled(enabled),
+            onSimulatedLocationChange: async (enabled: boolean): Promise<boolean> =>
+              this.setSimulatedLocationEnabled(enabled),
+            onSimulatedDownloadChange: async (enabled: boolean): Promise<boolean> =>
+              this.setSimulatedDownloadEnabled(enabled),
+            onPictureInPictureChange: async (enabled: boolean): Promise<boolean> =>
+              this.setPictureInPictureEnabled(enabled)
           })
         }
         .tabBar(this.tabBar($r('sys.symbol.person'), $r('sys.symbol.person_fill'), '我的'))

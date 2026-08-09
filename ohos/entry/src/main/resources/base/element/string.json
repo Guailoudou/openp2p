@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "OpenP2P"
+    },
+    {
+      "name": "permission_reason_location",
+      "value": "用于可选的低功耗后台定位保活功能"
     }
   ]
 }

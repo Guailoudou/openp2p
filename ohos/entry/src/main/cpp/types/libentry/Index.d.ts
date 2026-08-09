@@ -1,5 +1,5 @@
 export const add: (a: number, b: number) => number;
-export const startCore: (baseDir: string, token: string, shareBandwidth: number, logLevel: number) => boolean;
+export const startCore: (baseDir: string, token: string, node: string, shareBandwidth: number, logLevel: number) => boolean;
 export const getLastError: () => string;
 /** 0=stopped, 1=starting, 2=running, 3=failed; -1 means the core library is old. */
 export const getCoreState: () => number;

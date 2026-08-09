@@ -5,19 +5,197 @@ import { AboutPage } from './AboutPage';
 export struct ProfilePage {
   @State private showAbout: boolean = false;
   @State private showManagementAccount: boolean = false;
+  @State private showBackgroundSettings: boolean = false;
   @State private aboutPressed: boolean = false;
   @State private accountInput: string = '';
   @State private passwordInput: string = '';
   @State private accountMessage: string = '';
   @State private savingAccount: boolean = false;
+  @State private savingBackgroundSetting: boolean = false;
+  @State private localBackgroundKeepAliveEnabled: boolean = true;
+  @State private localSimulatedLocationEnabled: boolean = false;
+  @State private localSimulatedDownloadEnabled: boolean = false;
+  @State private localPictureInPictureEnabled: boolean = false;
   @Prop managementUsername: string = '';
   @Prop managementAuthenticated: boolean = false;
   @Prop managementEmail: string = '';
   @Prop managementPhone: string = '';
   @Prop managementAddTime: string = '';
+  @Prop backgroundKeepAliveEnabled: boolean = true;
+  @Prop simulatedLocationEnabled: boolean = false;
+  @Prop simulatedDownloadEnabled: boolean = false;
+  @Prop pictureInPictureEnabled: boolean = false;
   onSaveManagementCredentials: (username: string, password: string) => Promise<boolean> =
     async (_username: string, _password: string): Promise<boolean> => false;
   onClearManagementCredentials: () => Promise<void> = async (): Promise<void> => {};
+  onBackgroundKeepAliveChange: (enabled: boolean) => Promise<boolean> =
+    async (_enabled: boolean): Promise<boolean> => false;
+  onSimulatedLocationChange: (enabled: boolean) => Promise<boolean> =
+    async (_enabled: boolean): Promise<boolean> => false;
+  onSimulatedDownloadChange: (enabled: boolean) => Promise<boolean> =
+    async (_enabled: boolean): Promise<boolean> => false;
+  onPictureInPictureChange: (enabled: boolean) => Promise<boolean> =
+    async (_enabled: boolean): Promise<boolean> => false;
+
+  aboutToAppear(): void {
+    this.syncBackgroundSettingState();
+  }
+
+  private syncBackgroundSettingState(): void {
+    this.localBackgroundKeepAliveEnabled = this.backgroundKeepAliveEnabled;
+    this.localSimulatedLocationEnabled = this.simulatedLocationEnabled;
+    this.localSimulatedDownloadEnabled = this.simulatedDownloadEnabled;
+    this.localPictureInPictureEnabled = this.pictureInPictureEnabled;
+  }
+
+  private async changeBackgroundKeepAlive(enabled: boolean): Promise<void> {
+    if (this.savingBackgroundSetting) {
+      return;
+    }
+    this.localBackgroundKeepAliveEnabled = enabled;
+    this.savingBackgroundSetting = true;
+    try {
+      if (!await this.onBackgroundKeepAliveChange(enabled)) {
+        this.localBackgroundKeepAliveEnabled = !enabled;
+      }
+    } catch (_) {
+      this.localBackgroundKeepAliveEnabled = !enabled;
+    } finally {
+      this.savingBackgroundSetting = false;
+    }
+  }
+
+  private async changeSimulatedLocation(enabled: boolean): Promise<void> {
+    if (this.savingBackgroundSetting) {
+      return;
+    }
+    this.localSimulatedLocationEnabled = enabled;
+    this.savingBackgroundSetting = true;
+    try {
+      if (!await this.onSimulatedLocationChange(enabled)) {
+        this.localSimulatedLocationEnabled = !enabled;
+      }
+    } catch (_) {
+      this.localSimulatedLocationEnabled = !enabled;
+    } finally {
+      this.savingBackgroundSetting = false;
+    }
+  }
+
+  private async changeSimulatedDownload(enabled: boolean): Promise<void> {
+    if (this.savingBackgroundSetting) {
+      return;
+    }
+    this.localSimulatedDownloadEnabled = enabled;
+    this.savingBackgroundSetting = true;
+    try {
+      if (!await this.onSimulatedDownloadChange(enabled)) {
+        this.localSimulatedDownloadEnabled = !enabled;
+      }
+    } catch (_) {
+      this.localSimulatedDownloadEnabled = !enabled;
+    } finally {
+      this.savingBackgroundSetting = false;
+    }
+  }
+
+  private async changePictureInPicture(enabled: boolean): Promise<void> {
+    if (this.savingBackgroundSetting) {
+      return;
+    }
+    this.localPictureInPictureEnabled = enabled;
+    this.savingBackgroundSetting = true;
+    try {
+      if (!await this.onPictureInPictureChange(enabled)) {
+        this.localPictureInPictureEnabled = !enabled;
+      }
+    } catch (_) {
+      this.localPictureInPictureEnabled = !enabled;
+    } finally {
+      this.savingBackgroundSetting = false;
+    }
+  }
+
+  @Builder
+  private backgroundSettingsSheet() {
+    Scroll() {
+      Column({ space: 12 }) {
+        Row({ space: 14 }) {
+          this.backgroundSettingLabel($r('sys.symbol.lock_fill'), '持续后台任务', '使用系统长时任务维持连接')
+          Toggle({ type: ToggleType.Switch, isOn: $$this.localBackgroundKeepAliveEnabled })
+            .selectedColor($r('app.color.accent'))
+            .enabled(!this.savingBackgroundSetting)
+            .onChange((enabled: boolean): void => {
+            this.changeBackgroundKeepAlive(enabled);
+          })
+        }
+        .width('100%').padding(16).backgroundColor($r('app.color.card_background')).borderRadius(16)
+
+        Row({ space: 14 }) {
+          this.backgroundSettingLabel($r('sys.symbol.compass_circle'), '模拟定位', '使用低功耗后台定位模式')
+          Toggle({ type: ToggleType.Switch, isOn: $$this.localSimulatedLocationEnabled })
+            .selectedColor($r('app.color.accent'))
+            .enabled(!this.savingBackgroundSetting)
+            .onChange((enabled: boolean): void => {
+            this.changeSimulatedLocation(enabled);
+          })
+        }
+        .width('100%').padding(16).backgroundColor($r('app.color.card_background')).borderRadius(16)
+
+        Row({ space: 14 }) {
+          this.backgroundSettingLabel($r('sys.symbol.circle_and_arrow_down'), '模拟下载', '使用数据传输实况通知')
+          Toggle({ type: ToggleType.Switch, isOn: $$this.localSimulatedDownloadEnabled })
+            .selectedColor($r('app.color.accent'))
+            .enabled(!this.savingBackgroundSetting)
+            .onChange((enabled: boolean): void => {
+            this.changeSimulatedDownload(enabled);
+          })
+        }
+        .width('100%').padding(16).backgroundColor($r('app.color.card_background')).borderRadius(16)
+
+        Row({ space: 14 }) {
+          this.backgroundSettingLabel($r('sys.symbol.media_center'), '画中画', '进入后台时显示运行小窗')
+          Toggle({ type: ToggleType.Switch, isOn: $$this.localPictureInPictureEnabled })
+            .selectedColor($r('app.color.accent'))
+            .enabled(!this.savingBackgroundSetting)
+            .onChange((enabled: boolean): void => {
+            this.changePictureInPicture(enabled);
+          })
+        }
+        .width('100%').padding(16).backgroundColor($r('app.color.card_background')).borderRadius(16)
+      }
+      .width('100%')
+      .padding({ left: 20, right: 20, top: 8, bottom: 32 })
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  private backgroundSettingLabel(icon: Resource, title: string, subtitle: string) {
+    Row() {
+      SymbolGlyph(icon)
+        .fontSize(22)
+        .fontColor([$r('app.color.accent')])
+    }
+    .width(42)
+    .height(42)
+    .backgroundColor($r('app.color.accent_soft'))
+    .borderRadius(12)
+    .justifyContent(FlexAlign.Center)
+
+    Column({ space: 3 }) {
+      Text(title)
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_primary'))
+      Text(subtitle)
+        .fontSize(13)
+        .fontColor($r('app.color.text_secondary'))
+    }
+    .layoutWeight(1)
+    .alignItems(HorizontalAlign.Start)
+  }
 
   @Builder
   private aboutSheet() {
@@ -191,6 +369,50 @@ export struct ProfilePage {
             dragBar: true,
             preferType: SheetType.BOTTOM,
             title: { title: '管理账号' }
+          })
+
+          Row({ space: 14 }) {
+            Row() {
+              SymbolGlyph($r('sys.symbol.lock_fill'))
+                .fontSize(24)
+                .fontColor([$r('app.color.accent')])
+            }
+            .width(44)
+            .height(44)
+            .backgroundColor($r('app.color.accent_soft'))
+            .borderRadius(12)
+            .justifyContent(FlexAlign.Center)
+
+            Column({ space: 3 }) {
+              Text('后台保活')
+                .fontSize(17)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_primary'))
+              Text('持续任务、定位、下载与画中画设置')
+                .fontSize(13)
+                .fontColor($r('app.color.text_secondary'))
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .fontSize(18)
+              .fontColor([$r('app.color.text_tertiary')])
+          }
+          .width('100%')
+          .padding(18)
+          .backgroundColor($r('app.color.card_background'))
+          .borderRadius(16)
+          .shadow({ radius: 16, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 6 })
+          .onClick((): void => {
+            this.syncBackgroundSettingState();
+            this.showBackgroundSettings = true;
+          })
+          .bindSheet($$this.showBackgroundSettings, this.backgroundSettingsSheet(), {
+            height: SheetSize.MEDIUM,
+            dragBar: true,
+            preferType: SheetType.BOTTOM,
+            title: { title: '后台保活' }
           })
 
           Row({ space: 14 }) {

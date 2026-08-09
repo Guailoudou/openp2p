@@ -49,6 +49,18 @@ func copyCString(data *C.char, capacity C.int32_t, value string) C.int32_t {
 //
 //export OpenP2PStart
 func OpenP2PStart(baseDir *C.char, token *C.char, shareBandwidth C.int64_t, logLevel C.int64_t) C.int32_t {
+	return startCore(baseDir, token, nil, shareBandwidth, logLevel)
+}
+
+// OpenP2PStartWithNode accepts a platform device-name candidate. The core uses
+// it only when config.json has no non-empty network.Node value.
+//
+//export OpenP2PStartWithNode
+func OpenP2PStartWithNode(baseDir *C.char, token *C.char, node *C.char, shareBandwidth C.int64_t, logLevel C.int64_t) C.int32_t {
+	return startCore(baseDir, token, node, shareBandwidth, logLevel)
+}
+
+func startCore(baseDir *C.char, token *C.char, node *C.char, shareBandwidth C.int64_t, logLevel C.int64_t) C.int32_t {
 	coreMu.Lock()
 	if coreRunning {
 		coreMu.Unlock()
@@ -57,6 +69,10 @@ func OpenP2PStart(baseDir *C.char, token *C.char, shareBandwidth C.int64_t, logL
 
 	base := C.GoString(baseDir)
 	accessToken := C.GoString(token)
+	nodeCandidate := ""
+	if node != nil {
+		nodeCandidate = C.GoString(node)
+	}
 	if base == "" || accessToken == "" {
 		coreState = coreStateFailed
 		coreLastError = "OpenP2PStart received an empty base directory or token"
@@ -70,7 +86,7 @@ func OpenP2PStart(baseDir *C.char, token *C.char, shareBandwidth C.int64_t, logL
 	coreMu.Unlock()
 
 	go func() {
-		network := op2p.RunAsModule(base, accessToken, int(shareBandwidth), int(logLevel))
+		network := op2p.RunAsModuleWithNode(base, accessToken, nodeCandidate, int(shareBandwidth), int(logLevel))
 		if network == nil {
 			op2p.StopModule()
 			coreMu.Lock()

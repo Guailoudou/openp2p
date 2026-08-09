@@ -2,6 +2,7 @@ import VpnExtensionAbility from '@ohos.app.ability.VpnExtensionAbility';
 import vpnExtension from '@ohos.net.vpnExtension';
 import { Want } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
+import { deviceInfo } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import coreNative from 'libentry.so';
 import { RuntimeStateStore } from '../service/RuntimeStateStore';
@@ -12,11 +13,13 @@ const TAG = 'OPL-VPN';
 const STATUS_FILE = 'opl_core_status.json';
 const LOCK_FILE = 'vpn_ipc.lock';
 const VPN_REQUEST_FILE = 'opl_vpn_request.json';
+const CORE_CHECK_REQUEST_FILE = 'opl_core_check_request';
 const MAX_PACKET_SIZE = 64 * 1024;
 const WRITE_TIMEOUT_MS = 50;
 const VPN_INTERFACE = 'vpn-tun';
 const POLL_INTERVAL_MS = 5;
 const CORE_CHECK_INTERVAL_MS = 10 * 1000;
+const CORE_CHECK_REQUEST_POLL_MS = 250;
 const CORE_FAILURE_THRESHOLD = 3;
 const RECOVERY_WINDOW_MS = 10 * 60 * 1000;
 const MAX_RECOVERIES_PER_WINDOW = 5;
@@ -44,6 +47,7 @@ interface SdwanNode {
 interface SdwanInfo {
   gateway?: string;
   mtu?: number;
+  enable?: number;
   Nodes?: SdwanNode[];
 }
 
@@ -68,6 +72,8 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
   private writeBuffer: ArrayBuffer = new ArrayBuffer(MAX_PACKET_SIZE);
   private launchState?: CoreState;
   private watchdogTimer: number = -1;
+  private coreCheckRequestTimer: number = -1;
+  private vpnGeneration: number = 0;
   private consecutiveCoreFailures: number = 0;
   private recoveryInProgress: boolean = false;
   private recoveryTimestamps: number[] = [];
@@ -97,6 +103,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     this.stopCore();
     this.removeFile(LOCK_FILE);
     this.removeFile(VPN_REQUEST_FILE);
+    this.removeFile(CORE_CHECK_REQUEST_FILE);
     this.writeStatus('stopped', 'VPN extension destroyed', this.requestId);
   }
 
@@ -116,7 +123,8 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
 
     hilog.info(DOMAIN, TAG, 'Calling OpenP2PStart, baseDir=%{public}s, logLevel=%{public}d',
       state.baseDir, state.logLevel);
-    const coreStarted = coreNative.startCore(state.baseDir, state.token, state.shareBandwidth, state.logLevel);
+    const coreStarted = coreNative.startCore(
+      state.baseDir, state.token, this.deviceNodeCandidate(), state.shareBandwidth, state.logLevel);
     hilog.info(DOMAIN, TAG, 'OpenP2PStart returned %{public}s', String(coreStarted));
     if (!coreStarted) {
       const nativeError = this.readNativeError();
@@ -154,22 +162,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     // authenticated node has not been assigned to an SD-WAN yet. Keep the
     // core connected and consume later server refreshes instead of treating
     // that state as a fatal native-core failure.
-    const vpnConfig = await this.waitForVpnConfig();
-    if (vpnConfig === undefined) {
-      return;
-    }
-
-    const vpnConnection = vpnExtension.createVpnConnection(this.context);
-    this.connection = vpnConnection;
-    try {
-      this.vpnFd = await vpnConnection.create(vpnConfig);
-    } catch (error) {
-      throw new Error(`OHOS VPN creation failed: ${JSON.stringify(error)}`);
-    }
-    hilog.info(DOMAIN, TAG, 'OHOS VPN interface created, fd=%{public}d', this.vpnFd);
-    this.writeStatus('vpn_ready', '核心已连接，SD-WAN 接口已就绪', this.requestId);
-    this.readLoop();
-    this.writeLoop();
+    await this.monitorVpnConfig();
   }
 
   private writeStatus(state: string, message: string, requestId: number = this.requestId): void {
@@ -374,7 +367,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     });
   }
 
-  private async waitForVpnConfig(): Promise<vpnExtension.VpnConfig | undefined> {
+  private async monitorVpnConfig(): Promise<void> {
     const nodeName = coreNative.getNodeName();
     while (!this.stopping) {
       // This call waits in a native worker until the Go core receives the
@@ -384,6 +377,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
       try {
         const parsed = JSON.parse(configText) as SdwanInfo | null;
         if (parsed === null) {
+          await this.destroyVpn();
           this.writeStatus('vpn_waiting_config', '核心已连接，正在等待有效的 SD-WAN 配置', this.requestId);
           continue;
         }
@@ -392,16 +386,51 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
         throw new Error('OpenP2P returned invalid SD-WAN JSON');
       }
 
-      const vpnConfig = this.createVpnConfig(config, nodeName);
-      if (vpnConfig !== undefined) {
-        return vpnConfig;
+      if (config.enable === 0) {
+        await this.destroyVpn();
+        this.writeStatus('core_started', '核心正在运行，云端已关闭 SD-WAN/TUN', this.requestId);
+        continue;
       }
 
-      const detail = `核心已连接，端口映射可用；节点 ${nodeName} 暂未加入 SD-WAN`;
-      this.writeStatus('vpn_waiting_config', detail, this.requestId);
-      hilog.warn(DOMAIN, TAG, '%{public}s; config=%{public}s', detail, configText);
+      const vpnConfig = this.createVpnConfig(config, nodeName);
+      if (vpnConfig === undefined) {
+        await this.destroyVpn();
+        const detail = `核心已连接，端口映射可用；节点 ${nodeName} 暂未加入 SD-WAN`;
+        this.writeStatus('vpn_waiting_config', detail, this.requestId);
+        hilog.warn(DOMAIN, TAG, '%{public}s; config=%{public}s', detail, configText);
+        continue;
+      }
+
+      if (!await this.replaceVpn(vpnConfig)) {
+        this.writeStatus('vpn_waiting_config', '核心已连接，鸿蒙 VPN 接口创建失败', this.requestId);
+      }
     }
-    return undefined;
+  }
+
+  private async replaceVpn(config: vpnExtension.VpnConfig): Promise<boolean> {
+    await this.destroyVpn();
+    if (this.stopping) {
+      return false;
+    }
+    const vpnConnection = vpnExtension.createVpnConnection(this.context);
+    this.connection = vpnConnection;
+    try {
+      this.vpnFd = await vpnConnection.create(config);
+    } catch (error) {
+      this.connection = undefined;
+      try {
+        await vpnConnection.destroy();
+      } catch (_) {
+      }
+      hilog.error(DOMAIN, TAG, 'OHOS VPN creation failed: %{public}s', JSON.stringify(error));
+      return false;
+    }
+    const generation = ++this.vpnGeneration;
+    hilog.info(DOMAIN, TAG, 'OHOS VPN interface created or refreshed, fd=%{public}d', this.vpnFd);
+    this.writeStatus('vpn_ready', '核心已连接，SD-WAN 接口已就绪', this.requestId);
+    this.readLoop(generation);
+    this.writeLoop(generation);
+    return true;
   }
 
   private createVpnConfig(info: SdwanInfo, nodeName: string): vpnExtension.VpnConfig | undefined {
@@ -494,8 +523,8 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     return octets.join('.');
   }
 
-  private readLoop(): void {
-    if (this.stopping || this.vpnFd < 0) {
+  private readLoop(generation: number): void {
+    if (this.stopping || this.vpnFd < 0 || generation !== this.vpnGeneration) {
       return;
     }
     try {
@@ -511,13 +540,13 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
         this.stopping = true;
       }
     }
-    if (!this.stopping) {
-      setTimeout((): void => this.readLoop(), POLL_INTERVAL_MS);
+    if (!this.stopping && generation === this.vpnGeneration) {
+      setTimeout((): void => this.readLoop(generation), POLL_INTERVAL_MS);
     }
   }
 
-  private writeLoop(): void {
-    if (this.stopping || this.vpnFd < 0) {
+  private writeLoop(generation: number): void {
+    if (this.stopping || this.vpnFd < 0 || generation !== this.vpnGeneration) {
       return;
     }
     try {
@@ -529,8 +558,8 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
       hilog.error(DOMAIN, TAG, 'VPN write failed: %{public}s', JSON.stringify(error));
       this.stopping = true;
     }
-    if (!this.stopping) {
-      setTimeout((): void => this.writeLoop(), POLL_INTERVAL_MS);
+    if (!this.stopping && generation === this.vpnGeneration) {
+      setTimeout((): void => this.writeLoop(generation), POLL_INTERVAL_MS);
     }
   }
 
@@ -547,6 +576,9 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     this.watchdogTimer = setInterval((): void => {
       this.checkCoreLiveness();
     }, CORE_CHECK_INTERVAL_MS);
+    this.coreCheckRequestTimer = setInterval((): void => {
+      this.handleCoreCheckRequest();
+    }, CORE_CHECK_REQUEST_POLL_MS);
     hilog.info(DOMAIN, TAG, 'Core liveness watchdog started');
   }
 
@@ -554,6 +586,24 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     if (this.watchdogTimer >= 0) {
       clearInterval(this.watchdogTimer);
       this.watchdogTimer = -1;
+    }
+    if (this.coreCheckRequestTimer >= 0) {
+      clearInterval(this.coreCheckRequestTimer);
+      this.coreCheckRequestTimer = -1;
+    }
+  }
+
+  private handleCoreCheckRequest(): void {
+    const path = `${this.context.filesDir}/${CORE_CHECK_REQUEST_FILE}`;
+    try {
+      if (!fileIo.accessSync(path)) {
+        return;
+      }
+      fileIo.unlinkSync(path);
+      hilog.info(DOMAIN, TAG, 'Immediate core liveness check requested by foreground UI');
+      this.checkCoreLiveness();
+    } catch (error) {
+      hilog.warn(DOMAIN, TAG, 'Unable to handle immediate core check request: %{public}s', JSON.stringify(error));
     }
   }
 
@@ -607,7 +657,8 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
       this.stopCore();
       await this.sleep(250);
       const state = this.launchState;
-      const started = coreNative.startCore(state.baseDir, state.token, state.shareBandwidth, state.logLevel);
+      const started = coreNative.startCore(
+        state.baseDir, state.token, this.deviceNodeCandidate(), state.shareBandwidth, state.logLevel);
       if (!started || !await this.waitForServerConnected()) {
         const detail = this.readNativeError();
         this.writeStatus('core_restarting',
@@ -628,6 +679,15 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     }
   }
 
+  private deviceNodeCandidate(): string {
+    const marketName = deviceInfo.marketName.trim();
+    if (marketName.length > 0 && marketName !== 'default') {
+      return marketName;
+    }
+    const productModel = deviceInfo.productModel.trim();
+    return productModel.length > 0 && productModel !== 'default' ? productModel : 'HarmonyOS-device';
+  }
+
   private exhaustRecovery(): void {
     this.stopping = true;
     this.stopCoreWatchdog();
@@ -639,7 +699,8 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     hilog.error(DOMAIN, TAG, 'Core recovery limit reached');
   }
 
-  private destroyVpn(): void {
+  private async destroyVpn(): Promise<void> {
+    this.vpnGeneration++;
     if (this.vpnFd >= 0) {
       try {
         fileIo.closeSync(this.vpnFd);
@@ -649,8 +710,13 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
       this.vpnFd = -1;
     }
     if (this.connection !== undefined) {
-      this.connection.destroy().catch(() => undefined);
+      const connection = this.connection;
       this.connection = undefined;
+      try {
+        await connection.destroy();
+      } catch (_) {
+        // The VPN service may already have destroyed the connection.
+      }
     }
   }
 

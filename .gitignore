@@ -22,6 +22,8 @@ cmd/openp2p
 vendor/
 config.json
 openp2p
+!app/app/src/main/java/cn/openp2p/
+!app/app/src/main/java/cn/openp2p/**
 lib/openp2p.dll
 cmd/config.json0
 test/docker/Dockerfile

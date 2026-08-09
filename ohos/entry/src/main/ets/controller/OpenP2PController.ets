@@ -85,6 +85,70 @@ export class OpenP2PController {
     this.state.tokenLocked = false;
   }
 
+  isBackgroundKeepAliveEnabled(): boolean {
+    return this.service.isBackgroundKeepAliveEnabled();
+  }
+
+  isSimulatedLocationEnabled(): boolean {
+    return this.service.isSimulatedLocationEnabled();
+  }
+
+  isSimulatedDownloadEnabled(): boolean {
+    return this.service.isSimulatedDownloadEnabled();
+  }
+
+  isPictureInPictureEnabled(): boolean {
+    return this.service.isPictureInPictureEnabled();
+  }
+
+  async initializePictureInPicture(uiContext: UIContext): Promise<void> {
+    await this.service.initializePictureInPicture(uiContext);
+  }
+
+  async setBackgroundKeepAliveEnabled(enabled: boolean): Promise<boolean> {
+    const available = await this.service.setBackgroundKeepAliveEnabled(enabled);
+    if (enabled) {
+      promptAction.showToast({
+        message: available ? '持续后台任务已开启' : '设置已保存，系统任务不可用时将依赖其他保活方式'
+      });
+    } else {
+      promptAction.showToast({ message: '持续后台任务已关闭' });
+    }
+    return true;
+  }
+
+  async setSimulatedLocationEnabled(enabled: boolean): Promise<boolean> {
+    const available = await this.service.setSimulatedLocationEnabled(enabled);
+    if (!available && enabled) {
+      promptAction.showToast({ message: '设置已保存，授予定位和后台定位权限后生效' });
+      return true;
+    }
+    promptAction.showToast({
+      message: enabled ? '模拟定位已开启，请在系统设置中选择“始终允许”' : '模拟定位保活已关闭'
+    });
+    return true;
+  }
+
+  async setSimulatedDownloadEnabled(enabled: boolean): Promise<boolean> {
+    const available = await this.service.setSimulatedDownloadEnabled(enabled);
+    if (!available && enabled) {
+      promptAction.showToast({ message: '设置已保存，开启通知权限后生效' });
+      return true;
+    }
+    promptAction.showToast({ message: enabled ? '模拟下载保活已开启' : '模拟下载保活已关闭' });
+    return true;
+  }
+
+  async setPictureInPictureEnabled(enabled: boolean, uiContext: UIContext): Promise<boolean> {
+    const available = await this.service.setPictureInPictureEnabled(enabled, uiContext);
+    if (!available && enabled) {
+      promptAction.showToast({ message: '设置已保存，当前设备不支持画中画' });
+      return true;
+    }
+    promptAction.showToast({ message: enabled ? '画中画保活已开启' : '画中画保活已关闭' });
+    return true;
+  }
+
   async exportLog(): Promise<void> {
     try {
       const exported = await this.logExportService.export();
