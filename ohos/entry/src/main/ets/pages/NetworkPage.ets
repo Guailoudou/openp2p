@@ -72,11 +72,6 @@ export struct NetworkPage {
       !this.config.Nodes.some((member: SdwanMember): boolean => member.name === device.name));
   }
 
-  private relayDevices(): ManagementDevice[] {
-    return this.devices.filter((device: ManagementDevice): boolean => device.isActive === 1 &&
-      (device.natType === 1 || device.hasIPv4 === 1 || device.hasUPNPorNATPMP === 1));
-  }
-
   private edgeServer(name: string): string {
     const device = this.devices.find((item: ManagementDevice): boolean => item.name === name);
     return device && device.edgeServer ? device.edgeServer : '';
@@ -142,6 +137,32 @@ export struct NetworkPage {
           if (device) {
             this.addMember(device);
           }
+        }
+      }
+    });
+  }
+
+  private showNodePicker(): void {
+    const names: string[] = ['不指定'];
+    this.config.Nodes.forEach((member: SdwanMember): void => {
+      if (!names.includes(member.name)) {
+        names.push(member.name);
+      }
+    });
+    let selected = this.config.centralNode.length > 0 ? names.indexOf(this.config.centralNode) : 0;
+    if (selected < 0) {
+      selected = 0;
+    }
+    this.getUIContext().showTextPickerDialog({
+      range: names,
+      selected: selected,
+      value: names[selected],
+      canLoop: false,
+      onAccept: (result: TextPickerResult): void => {
+        const value = result.value;
+        if (typeof value === 'string') {
+          this.config.centralNode = value === '不指定' ? '' : value;
+          this.refreshConfig();
         }
       }
     });
@@ -304,23 +325,22 @@ export struct NetworkPage {
 
   @Builder
   private nodeSelector() {
-    Column({ space: 8 }) {
+    Row({ space: 12 }) {
       Text(this.config.mode === 'central' ? '中心节点' : '指定中继节点')
-        .width('100%').fontSize(14).fontColor($r('app.color.text_secondary'))
-      Row({ space: 8 }) {
-        Button('不指定')
-          .fontColor(this.config.centralNode.length === 0 ? $r('app.color.button_text') : $r('app.color.text_primary'))
-          .backgroundColor(this.config.centralNode.length === 0 ? $r('app.color.accent') : $r('app.color.page_background'))
-          .onClick((): void => { this.config.centralNode = ''; this.refreshConfig(); })
-        ForEach(this.relayDevices(), (device: ManagementDevice) => {
-          Button(device.name)
-            .fontColor(this.config.centralNode === device.name ? $r('app.color.button_text') : $r('app.color.text_primary'))
-            .backgroundColor(this.config.centralNode === device.name ? $r('app.color.accent') :
-              $r('app.color.page_background'))
-            .onClick((): void => { this.config.centralNode = device.name; this.refreshConfig(); })
-        }, (device: ManagementDevice): string => device.name)
-      }.width('100%')
-    }.width('100%')
+        .layoutWeight(1).fontColor($r('app.color.text_primary'))
+      Button() {
+        Row() {
+          Text(this.config.centralNode.length > 0 ? this.config.centralNode : '不指定')
+            .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+            .textAlign(TextAlign.Start).fontColor($r('app.color.text_primary'))
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(18).fontColor([$r('app.color.text_secondary')])
+        }.width('100%')
+      }
+      .width(180).height(48).padding({ left: 20, right: 16 })
+      .backgroundColor($r('app.color.page_background'))
+      .onClick((): void => { this.showNodePicker(); })
+    }.width('100%').alignItems(VerticalAlign.Center)
   }
 
   @Builder
@@ -375,11 +395,14 @@ export struct NetworkPage {
                 })
             }.width('100%')
           }
-          Text('打洞优先级').width('100%').fontSize(14).fontColor($r('app.color.text_secondary'))
-          Select([{ value: '默认' }, { value: 'TCP 优先' }, { value: '仅 TCP' }, { value: '仅 UDP' }])
-            .selected(this.config.punchPriority)
-            .value(this.punchPriorityLabel(this.config.punchPriority))
-            .onSelect((index: number): void => { this.config.punchPriority = index; this.refreshConfig(); })
+          Row({ space: 12 }) {
+            Text('打洞优先级').layoutWeight(1).fontColor($r('app.color.text_primary'))
+            Select([{ value: '默认' }, { value: 'TCP 优先' }, { value: '仅 TCP' }, { value: '仅 UDP' }])
+              .width(180)
+              .selected(this.config.punchPriority)
+              .value(this.punchPriorityLabel(this.config.punchPriority))
+              .onSelect((index: number): void => { this.config.punchPriority = index; this.refreshConfig(); })
+          }.width('100%').alignItems(VerticalAlign.Center)
         }
         .width('100%').padding(18).backgroundColor($r('app.color.card_background')).borderRadius(18)
 
@@ -407,7 +430,7 @@ export struct NetworkPage {
             Text('可加入设备').width('100%').fontSize(18).fontWeight(FontWeight.Medium)
             Text(`当前有 ${this.availableDevices().length} 台设备可加入`)
               .width('100%').fontSize(13).fontColor($r('app.color.text_secondary'))
-            Button('滑动选择设备')
+            Button('选择设备')
               .width('100%').height(48).onClick((): void => { this.showAddDevicePicker(); })
           }.width('100%').padding(18).backgroundColor($r('app.color.card_background')).borderRadius(18)
         }

@@ -6,10 +6,13 @@ export struct StatusCard {
   @State private pulseScale: number = 1.0;
 
   private title(): string {
+    if (this.state.coreState === 'core_restarting') {
+      return '恢复中';
+    }
     if (this.state.connected) {
       return '已连接';
     }
-    if (this.state.coreState === 'failed') {
+    if (this.state.coreState === 'failed' || this.state.coreState === 'recovery_exhausted') {
       return '启动失败';
     }
     if (this.state.running || this.state.busy) {
@@ -22,7 +25,7 @@ export struct StatusCard {
     if (this.state.connected) {
       return $r('app.color.status_connected');
     }
-    if (this.state.coreState === 'failed') {
+    if (this.state.coreState === 'failed' || this.state.coreState === 'recovery_exhausted') {
       return $r('app.color.status_failed');
     }
     if (this.state.running || this.state.busy) {
@@ -35,7 +38,7 @@ export struct StatusCard {
     if (this.state.connected) {
       return $r('sys.symbol.checkmark_circle_fill');
     }
-    if (this.state.coreState === 'failed') {
+    if (this.state.coreState === 'failed' || this.state.coreState === 'recovery_exhausted') {
       return $r('sys.symbol.xmark_circle_fill');
     }
     if (this.state.running || this.state.busy) {
@@ -55,7 +58,9 @@ export struct StatusCard {
       case 'core_starting':
         return '正在启动 OpenP2P 核心';
       case 'core_started':
-        return '核心已启动，正在登录服务器';
+        return '核心已连接，端口映射功能可用';
+      case 'core_restarting':
+        return this.state.coreMessage.length > 0 ? this.state.coreMessage : '正在自动恢复 OpenP2P 核心';
       case 'vpn_requested':
         return '正在请求创建虚拟网络接口';
       case 'vpn_starting':
@@ -66,6 +71,8 @@ export struct StatusCard {
         return '虚拟网络接口已就绪';
       case 'failed':
         return '启动失败，请前往日志页面查看详情';
+      case 'recovery_exhausted':
+        return this.state.coreMessage.length > 0 ? this.state.coreMessage : '自动恢复次数已达到上限';
       case 'stopped':
         return '核心已停止运行';
       case 'unknown':

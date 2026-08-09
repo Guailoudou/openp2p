@@ -13,6 +13,7 @@ export class OpenP2PController {
   private logExportService: LogExportService;
   private pollTimer: number = -1;
   private lastLogText: string = '';
+  private visibleLogText: string = '';
 
   constructor(context: common.UIAbilityContext, state: CoreUiState) {
     this.state = state;
@@ -22,6 +23,7 @@ export class OpenP2PController {
 
   startPolling(): void {
     this.loadStoredToken();
+    this.resetVisibleLogs();
     this.refresh();
     if (this.pollTimer < 0) {
       this.pollTimer = setInterval((): void => this.refresh(), 500);
@@ -116,8 +118,7 @@ export class OpenP2PController {
     this.state.busy = true;
     this.state.connected = false;
     this.state.token = token;
-    // Do not treat a login line from an earlier session as current success.
-    this.lastLogText = this.service.readLogText();
+    this.resetVisibleLogs();
     try {
       await this.service.start(token);
       promptAction.showToast({ message: '核心已启动，正在登录' });
@@ -152,10 +153,8 @@ export class OpenP2PController {
     this.state.coreState = status.state;
     this.state.coreMessage = status.message;
     this.state.running = this.isRunningState(status.state);
-    if (status.state === 'stopped' || status.state === 'not_started' || status.state === 'failed' ||
-      status.state === 'recovery_exhausted') {
-      this.state.connected = false;
-    }
+    this.state.connected = status.state === 'core_started' || status.state === 'vpn_requested' ||
+      status.state === 'vpn_starting' || status.state === 'vpn_waiting_config' || status.state === 'vpn_ready';
   }
 
   private applyLogText(text: string): void {
@@ -167,17 +166,17 @@ export class OpenP2PController {
       appended = text.substring(this.lastLogText.length);
     }
     this.lastLogText = text;
+    this.visibleLogText += appended;
 
-    for (const line of appended.split('\n')) {
-      if (line.toLowerCase().includes('login ok')) {
-        // This is intentionally identical to the Flutter connection check.
-        this.state.connected = true;
-      }
-    }
-
-    const lines = text.split('\n').filter((line: string): boolean => line.trim().length > 0);
+    const lines = this.visibleLogText.split('\n').filter((line: string): boolean => line.trim().length > 0);
     const start = Math.max(0, lines.length - MAX_VISIBLE_LOG_LINES);
     this.state.logs = lines.slice(start);
+  }
+
+  private resetVisibleLogs(): void {
+    this.lastLogText = this.service.readLogText();
+    this.visibleLogText = '';
+    this.state.logs = [];
   }
 
   private isRunningState(value: string): boolean {

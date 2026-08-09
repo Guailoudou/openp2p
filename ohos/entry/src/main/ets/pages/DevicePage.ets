@@ -105,11 +105,55 @@ export struct DevicePage {
       `${device.version}-${device.lanip}-${device.ip}`;
   }
 
-  private openActions(device: ManagementDevice): void {
+  private prepareDeviceAction(device: ManagementDevice): void {
     this.selectedDeviceName = device.name;
-    this.sheetMode = 'actions';
     this.message = '';
-    this.showSheet = true;
+  }
+
+  private handleDeviceMenuAction(device: ManagementDevice, action: string): void {
+    this.prepareDeviceAction(device);
+    if (action === 'mappings') {
+      this.sheetMode = 'mappings';
+      this.showSheet = true;
+      this.openMappings();
+    } else if (action === 'edit') {
+      this.sheetMode = 'editDevice';
+      this.showSheet = true;
+      this.openDeviceEditor();
+    } else if (action === 'update') {
+      this.sheetMode = 'confirmUpdate';
+      this.showSheet = true;
+      this.requestDeviceUpdate();
+    } else if (action === 'restart') {
+      this.sheetMode = 'confirmRestart';
+      this.showSheet = true;
+      this.requestDeviceRestart();
+    } else if (action === 'delete') {
+      this.sheetMode = 'deleteDevice';
+      this.showSheet = true;
+    }
+  }
+
+  @Builder
+  private deviceContextMenu(device: ManagementDevice) {
+    Menu() {
+      if (device.isActive === 1) {
+        MenuItem({ content: '端口映射' })
+          .onClick((): void => { this.handleDeviceMenuAction(device, 'mappings'); })
+        MenuItem({ content: '编辑设备' })
+          .onClick((): void => { this.handleDeviceMenuAction(device, 'edit'); })
+        if (this.upgradeUnavailableReason(device).length === 0) {
+          MenuItem({
+            content: this.latestVersion.length > 0 ? `升级客户端至 ${this.latestVersion}` : '升级客户端'
+          })
+            .onClick((): void => { this.handleDeviceMenuAction(device, 'update'); })
+        }
+        MenuItem({ content: '重启设备' })
+          .onClick((): void => { this.handleDeviceMenuAction(device, 'restart'); })
+      }
+      MenuItem({ content: '删除设备' })
+        .onClick((): void => { this.handleDeviceMenuAction(device, 'delete'); })
+    }.width(220)
   }
 
   private openDeviceEditor(): void {
@@ -222,11 +266,6 @@ export struct DevicePage {
       return `当前已是最新版本 ${this.latestVersion}`;
     }
     return '';
-  }
-
-  private selectedUpgradeReason(): string {
-    const device = this.selectedDevice();
-    return device ? this.upgradeUnavailableReason(device) : '未找到设备';
   }
 
   private compareVersion(left: string, right: string): number {
@@ -434,24 +473,6 @@ export struct DevicePage {
   }
 
   @Builder
-  private deviceActions() {
-    Column({ space: 12 }) {
-      Button('端口映射').width('100%').height(48).onClick((): void => { this.openMappings(); })
-      Button('编辑设备').width('100%').height(48).onClick((): void => { this.openDeviceEditor(); })
-      Button(this.latestVersion.length > 0 ? `升级客户端至 ${this.latestVersion}` : '升级客户端')
-        .width('100%').height(48).enabled(this.selectedUpgradeReason().length === 0)
-        .onClick((): void => { this.requestDeviceUpdate(); })
-      if (this.selectedUpgradeReason().length > 0) {
-        Text(this.selectedUpgradeReason()).width('100%').fontSize(13).fontColor($r('app.color.text_secondary'))
-      }
-      Button('重启设备').width('100%').height(48).onClick((): void => { this.requestDeviceRestart(); })
-      Button('删除设备')
-        .width('100%').height(48).fontColor(Color.Red).backgroundColor(Color.Transparent)
-        .onClick((): void => { this.sheetMode = 'deleteDevice'; })
-    }.width('100%')
-  }
-
-  @Builder
   private fieldLabel(title: string, description: string = '') {
     Column({ space: 2 }) {
       Text(title).width('100%').fontSize(14).fontWeight(FontWeight.Medium)
@@ -599,9 +620,7 @@ export struct DevicePage {
       if (this.message.length > 0) {
         Text(this.message).width('100%').fontSize(14).fontColor($r('app.color.text_secondary'))
       }
-      if (this.sheetMode === 'actions') {
-        this.deviceActions()
-      } else if (this.sheetMode === 'editDevice') {
+      if (this.sheetMode === 'editDevice') {
         this.deviceEditor()
       } else if (this.sheetMode === 'mappings') {
         this.mappingList()
@@ -613,7 +632,7 @@ export struct DevicePage {
         Text('升级期间连接可能短暂中断。').width('100%').fontSize(13)
           .fontColor($r('app.color.text_secondary'))
         Row({ space: 10 }) {
-          Button('取消').layoutWeight(1).onClick((): void => { this.sheetMode = 'actions'; })
+          Button('取消').layoutWeight(1).onClick((): void => { this.showSheet = false; })
           Button('确认升级').layoutWeight(1).onClick((): void => { this.updateDevice(); })
         }.width('100%')
       } else if (this.sheetMode === 'confirmRestart') {
@@ -622,7 +641,7 @@ export struct DevicePage {
         Text('设备重启期间所有连接都会暂时断开。').width('100%').fontSize(13)
           .fontColor($r('app.color.text_secondary'))
         Row({ space: 10 }) {
-          Button('取消').layoutWeight(1).onClick((): void => { this.sheetMode = 'actions'; })
+          Button('取消').layoutWeight(1).onClick((): void => { this.showSheet = false; })
           Button('确认重启').layoutWeight(1).fontColor(Color.White).backgroundColor(Color.Red)
             .onClick((): void => { this.restartDevice(); })
         }.width('100%')
@@ -677,7 +696,7 @@ export struct DevicePage {
               }
               .width('100%').padding(18).backgroundColor($r('app.color.card_background')).borderRadius(18)
               .shadow({ radius: 12, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 4 })
-              .onClick((): void => { this.openActions(device); })
+              .bindContextMenu(this.deviceContextMenu(device), ResponseType.LongPress)
             }, (device: ManagementDevice): string => this.deviceCardKey(device))
           }
         }
