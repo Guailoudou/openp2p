@@ -127,9 +127,17 @@ class MainActivity : AppCompatActivity() {
 
             val prefs = getSharedPreferences(OpenP2PService.PREFERENCES, MODE_PRIVATE)
             val desired = prefs.getBoolean(OpenP2PService.KEY_DESIRED_RUNNING, false)
+            if (!alive && desired) {
+                prefs.edit().putString(OpenP2PService.KEY_STATE, "正在恢复核心").apply()
+                ContextCompat.startForegroundService(
+                    this@MainActivity,
+                    Intent(this@MainActivity, OpenP2PService::class.java)
+                        .setAction(OpenP2PService.ACTION_START)
+                )
+            }
             val state = when {
                 alive -> "核心运行中"
-                desired -> "核心未运行，等待后台服务恢复"
+                desired -> "正在恢复核心"
                 else -> "已停止"
             }
             prefs.edit().putString(OpenP2PService.KEY_STATE, state).apply()
@@ -396,8 +404,8 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { showManagementConsole() }
         })
         body.addView(card {
-            label(getString(R.string.common_questions))
-            label(getString(R.string.phone_setting), true)
+            label(getString(R.string.background_keep_alive))
+            label(getString(R.string.android_background_keep_alive_description), true)
             setOnClickListener { showBackgroundHelp() }
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         body.sectionHeader(getString(R.string.about))
@@ -418,6 +426,7 @@ class MainActivity : AppCompatActivity() {
                 if (session.profile.addTime.isNotBlank()) keyValue(getString(R.string.registration_time), session.profile.addTime)
                 val token = session.profile.token
                 keyValue(getString(R.string.token_label), getString(R.string.masked_token, token.takeLast(4)), mono = true)
+                label(getString(R.string.token_locked_by_login), true)
                 secondaryAction(getString(R.string.copy_token)) {
                     copySensitive(getString(R.string.token_label), token)
                     content.snack(getString(R.string.token_copied_warning))
@@ -466,7 +475,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showBackgroundHelp() {
-        bottomSheet(getString(R.string.common_questions)) { dialog ->
+        bottomSheet(getString(R.string.background_keep_alive)) { dialog ->
             label(getString(R.string.phone_setting), true)
             action(getString(R.string.request_battery_exemption)) { openBatteryOptimizationSettings() }
             secondaryAction(getString(R.string.open_autostart_settings)) { openAutoStartSettings() }
@@ -512,6 +521,14 @@ class MainActivity : AppCompatActivity() {
             label(getString(R.string.open_source_description), true)
             val packageInfo = packageManager.getPackageInfo(packageName, 0)
             keyValue(getString(R.string.about), getString(R.string.version_format, packageInfo.versionName ?: "--", packageInfo.versionCode))
+            keyValue(getString(R.string.runtime_platform), "Android")
+            val architecture = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                Build.SUPPORTED_ABIS.firstOrNull() ?: Build.CPU_ABI
+            } else {
+                Build.CPU_ABI
+            }
+            keyValue(getString(R.string.core_architecture), architecture)
+            keyValue(getString(R.string.core_type), "OpenP2P Go Native")
             action(getString(R.string.done)) { dialog.dismiss() }
         }
     }

@@ -322,7 +322,7 @@ export struct NetworkPage {
       return false;
     }
     if (this.config.mode === 'central' && this.config.centralNode.length === 0) {
-      this.showToast('中心组网模式必须选择中心节点');
+      this.showToast('中心模式必须选择中心节点');
       return false;
     }
     this.loading = true;
@@ -406,12 +406,12 @@ export struct NetworkPage {
   @Builder
   private segmentedMode() {
     Row({ space: 8 }) {
-      Button('全互联')
+      Button('P2P 模式')
         .layoutWeight(1)
         .fontColor(this.config.mode === 'fullmesh' ? $r('app.color.button_text') : $r('app.color.text_primary'))
         .backgroundColor(this.config.mode === 'fullmesh' ? $r('app.color.accent') : $r('app.color.page_background'))
         .onClick((): void => { this.config.mode = 'fullmesh'; this.refreshConfig(); })
-      Button('中心组网')
+      Button('中心模式')
         .layoutWeight(1)
         .fontColor(this.config.mode === 'central' ? $r('app.color.button_text') : $r('app.color.text_primary'))
         .backgroundColor(this.config.mode === 'central' ? $r('app.color.accent') : $r('app.color.page_background'))

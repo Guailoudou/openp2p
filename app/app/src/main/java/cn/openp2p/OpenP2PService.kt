@@ -142,9 +142,24 @@ class OpenP2PService : VpnService() {
     }
 
     private fun startOpenP2P(recovery: Boolean = false) {
-        if (coreJob?.isActive == true || running) {
+        if (coreJob?.isActive == true) {
+            return
+        }
+        if (running && try { Openp2p.isModuleRunning() } catch (e: Throwable) {
+                Logger.e(LOG_TAG, "恢复前核心存活检查失败", e)
+                true
+            }) {
             retryTunFromLastConfig()
             return
+        }
+        if (running) {
+            Logger.w(LOG_TAG, "服务仍在运行但核心已停止，立即重新启动核心")
+            watchdogJob?.cancel()
+            running = false
+            closeTun("核心正在恢复")
+            try { Openp2p.stopModule() } catch (e: Throwable) {
+                Logger.e(LOG_TAG, "清理已停止的核心失败", e)
+            }
         }
         val preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE)
         val token = SecureCredentialStore.get(this)

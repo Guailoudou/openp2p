@@ -76,6 +76,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
   private vpnGeneration: number = 0;
   private consecutiveCoreFailures: number = 0;
   private recoveryInProgress: boolean = false;
+  private foregroundCheckInProgress: boolean = false;
   private recoveryTimestamps: number[] = [];
   private currentStatusState: string = 'starting';
   private currentStatusMessage: string = 'VPN 扩展已启动';
@@ -601,14 +602,16 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
       }
       fileIo.unlinkSync(path);
       hilog.info(DOMAIN, TAG, 'Immediate core liveness check requested by foreground UI');
-      this.checkCoreLiveness();
+      this.checkCoreOnForeground().catch((error: Object) => {
+        hilog.error(DOMAIN, TAG, 'Foreground core liveness check failed: %{public}s', this.formatError(error));
+      });
     } catch (error) {
       hilog.warn(DOMAIN, TAG, 'Unable to handle immediate core check request: %{public}s', JSON.stringify(error));
     }
   }
 
   private checkCoreLiveness(): void {
-    if (this.stopping || this.recoveryInProgress) {
+    if (this.stopping || this.recoveryInProgress || this.foregroundCheckInProgress) {
       return;
     }
     if (this.isNativeCoreRunning()) {
@@ -629,7 +632,36 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     }
   }
 
-  private async recoverCore(): Promise<void> {
+  private async checkCoreOnForeground(): Promise<void> {
+    if (this.stopping || this.recoveryInProgress || this.foregroundCheckInProgress) {
+      return;
+    }
+    this.foregroundCheckInProgress = true;
+    try {
+      if (this.isNativeCoreRunning()) {
+        this.consecutiveCoreFailures = 0;
+        this.writeStatus(this.currentStatusState, this.currentStatusMessage, this.requestId);
+        return;
+      }
+      hilog.warn(DOMAIN, TAG, 'Foreground core liveness check failed 1/2; checking again in 1 second');
+      await this.sleep(1000);
+      if (this.stopping || this.recoveryInProgress) {
+        return;
+      }
+      if (this.isNativeCoreRunning()) {
+        this.consecutiveCoreFailures = 0;
+        this.writeStatus(this.currentStatusState, this.currentStatusMessage, this.requestId);
+        return;
+      }
+      this.consecutiveCoreFailures = CORE_FAILURE_THRESHOLD;
+      hilog.warn(DOMAIN, TAG, 'Foreground core liveness check failed 2/2; recovering immediately');
+      await this.recoverCore(true);
+    } finally {
+      this.foregroundCheckInProgress = false;
+    }
+  }
+
+  private async recoverCore(immediate: boolean = false): Promise<void> {
     if (this.recoveryInProgress || this.stopping || this.launchState === undefined) {
       return;
     }
@@ -645,11 +677,15 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
 
       const attempt = this.recoveryTimestamps.length + 1;
       const delayIndex = Math.min(attempt - 1, RECOVERY_DELAYS_MS.length - 1);
-      const delay = RECOVERY_DELAYS_MS[delayIndex];
+      const delay = immediate ? 0 : RECOVERY_DELAYS_MS[delayIndex];
       this.recoveryTimestamps.push(now);
-      this.writeStatus('core_restarting', `检测到核心已停止，${delay / 1000} 秒后执行第 ${attempt} 次恢复`,
-        this.requestId);
-      await this.sleep(delay);
+      const recoveryMessage = immediate
+        ? `前台连续两次检查失败，立即执行第 ${attempt} 次恢复`
+        : `检测到核心已停止，${delay / 1000} 秒后执行第 ${attempt} 次恢复`;
+      this.writeStatus('core_restarting', recoveryMessage, this.requestId);
+      if (delay > 0) {
+        await this.sleep(delay);
+      }
       if (this.stopping || this.launchState === undefined) {
         return;
       }

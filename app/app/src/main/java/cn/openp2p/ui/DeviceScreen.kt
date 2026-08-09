@@ -3,6 +3,8 @@ package cn.openp2p.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.graphics.Typeface
 import android.view.Gravity
 import android.view.Menu
@@ -24,6 +26,9 @@ import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.switchmaterial.SwitchMaterial
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class DeviceScreen(private val activity: MainActivity, private val session: ManagementSession) {
     val view: View
@@ -36,6 +41,7 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
     private var firstLoad = true
     private var errorMessage: String? = null
     private var busyDevice: String? = null
+    private var currentMappings: List<PortMapping> = emptyList()
 
     init {
         val root = LinearLayout(activity).apply {
@@ -112,7 +118,7 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
             return
         }
         visible.forEach { device ->
-            list.addView(activity.card {
+            val card = activity.card {
                 val header = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
                 header.addView(TextView(activity).apply {
                     text = device.remark.ifBlank { device.name }
@@ -126,14 +132,6 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
                     if (device.active) AppStatus.SUCCESS else AppStatus.NEUTRAL
                 ))
                 if (canUpgrade(device)) header.addView(activity.statusChip(activity.getString(R.string.upgrade_available), AppStatus.WARNING), LinearLayout.LayoutParams(-2, -2).apply { leftMargin = activity.dp(6) })
-                header.addView(MaterialButton(activity).apply {
-                    text = "⋮"
-                    textSize = 24f
-                    minWidth = activity.dp(48)
-                    minimumWidth = activity.dp(48)
-                    contentDescription = activity.getString(R.string.more_actions, device.remark.ifBlank { device.name })
-                    setOnClickListener { showMenu(this, device) }
-                }, LinearLayout.LayoutParams(activity.dp(48), activity.dp(48)).apply { leftMargin = activity.dp(4) })
                 addView(header)
                 label(device.name, true).apply { typeface = Typeface.MONOSPACE }
                 label(activity.getString(R.string.device_system_version, device.os.ifBlank { activity.getString(R.string.unknown_system) }, device.version.ifBlank { activity.getString(R.string.unknown_version) }), true)
@@ -149,9 +147,13 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
                     progress.addView(TextView(activity).apply { text = activity.getString(R.string.please_wait); setTextColor(activity.color(R.color.state_info)); setPadding(activity.dp(8), 0, 0, 0) })
                     addView(progress)
                 }
-                setOnClickListener { showDeviceDetails(device) }
+                setOnClickListener { openMappings(device) }
                 setOnLongClickListener { anchor -> showMenu(anchor, device); true }
-            }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(12) })
+            }
+            list.addView(activity.swipeActions(card, deviceSwipeActions(device)) { swiping ->
+                swipe.isEnabled = !swiping
+            },
+                LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(12) })
         }
     }
 
@@ -159,21 +161,6 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
         val value = activity.getString(R.string.device_addresses, device.lanIp.ifBlank { "--" }, device.ip.ifBlank { "--" })
         (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("OpenP2P device addresses", value))
         view.snack(activity.getString(R.string.addresses_copied))
-    }
-
-    private fun showDeviceDetails(device: Device) {
-        activity.bottomSheet(device.remark.ifBlank { device.name }) { dialog ->
-            keyValue(activity.getString(R.string.device_name), device.name, true)
-            keyValue(
-                activity.getString(R.string.network_mode),
-                device.os.ifBlank { activity.getString(R.string.unknown_system) } + " · " +
-                    device.version.ifBlank { activity.getString(R.string.unknown_version) }
-            )
-            keyValue("LAN IP", device.lanIp.ifBlank { "--" }, true)
-            keyValue("Public IP", device.ip.ifBlank { "--" }, true)
-            secondaryAction(activity.getString(R.string.port_mappings)) { dialog.dismiss(); openMappings(device) }
-            action(activity.getString(R.string.edit_device)) { dialog.dismiss(); editDevice(device) }
-        }
     }
 
     private fun showMenu(anchor: View, device: Device) {
@@ -196,10 +183,34 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
         }
     }
 
+    private fun deviceSwipeActions(device: Device): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        fun addAction(label: String, color: Int, action: () -> Unit) {
+            addView(MaterialButton(activity).apply {
+                text = label
+                minWidth = activity.dp(72)
+                minimumWidth = activity.dp(72)
+                setTextColor(Color.WHITE)
+                backgroundTintList = ColorStateList.valueOf(activity.color(color))
+                setOnClickListener { action() }
+            }, LinearLayout.LayoutParams(activity.dp(76), -1))
+        }
+        if (device.active) {
+            addAction(activity.getString(R.string.port_mappings), R.color.brand_primary) { openMappings(device) }
+            addAction(activity.getString(R.string.edit), R.color.brand_primary) { editDevice(device) }
+            if (canUpgrade(device)) {
+                addAction(activity.getString(R.string.upgrade), R.color.state_warning) { upgrade(device) }
+            }
+            addAction(activity.getString(R.string.restart), R.color.state_warning) { restart(device) }
+        }
+        addAction(activity.getString(R.string.delete), R.color.state_error) { delete(device) }
+    }
+
     private fun canUpgrade(device: Device): Boolean {
         if (!device.active || latestVersion.isBlank() || device.version.isBlank()) return false
         if (device.os.contains("android", true) || device.os.contains("ios", true) || device.os.contains("harmony", true)) return false
-        return device.updateAvailable || compareVersions(device.version, latestVersion) < 0
+        return !device.updateAvailable && compareVersions(device.version, latestVersion) < 0
     }
 
     private fun compareVersions(left: String, right: String): Int {
@@ -215,16 +226,18 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
     private fun editDevice(device: Device) {
         activity.bottomSheet(activity.getString(R.string.edit_device)) { dialog ->
             val name = field(activity.getString(R.string.device_name), device.name)
-            val bandwidth = field(activity.getString(R.string.bandwidth_mbps), device.bandwidth.toString(), numeric = true)
+            val bandwidth = field(activity.getString(R.string.bandwidth_mbps), device.bandwidth.takeIf { it > 0 }?.toString() ?: "10", numeric = true)
             val port = field(activity.getString(R.string.public_port), device.publicIPPort.toString(), numeric = true)
             val v6 = Switch(activity).apply { text = activity.getString(R.string.force_ipv6); isChecked = device.forceV6 != 0; minHeight = activity.dp(48) }
             addView(v6)
             val save = action(activity.getString(R.string.save_changes)) {}
             save.setOnClickListener {
                 val newName = name.text?.toString()?.trim().orEmpty()
-                if (newName.isBlank()) { name.showError(activity.getString(R.string.device_name_required)); return@setOnClickListener }
+                val publicPort = port.intValue()
+                if (newName.length < 8) { name.showError(activity.getString(R.string.device_name_too_short)); return@setOnClickListener }
+                if (publicPort !in 0..65535) { port.showError(activity.getString(R.string.public_port_invalid)); return@setOnClickListener }
                 save.setLoading(true, activity.getString(R.string.save_changes), activity.getString(R.string.please_wait))
-                val changed = device.copy(name = newName, bandwidth = bandwidth.intValue(), publicIPPort = port.intValue(), forceV6 = if (v6.isChecked) 1 else 0)
+                val changed = device.copy(name = newName, bandwidth = bandwidth.intValue(), publicIPPort = publicPort, forceV6 = if (v6.isChecked) 1 else 0)
                 runApi(device, activity.getString(R.string.save_success), { session.api.editDevice(device.name, changed) }) { dialog.dismiss(); load() }
             }
         }
@@ -250,6 +263,10 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
     }
 
     private fun openMappings(device: Device) {
+        if (!device.active) {
+            view.toast(activity.getString(R.string.device_offline_mappings))
+            return
+        }
         activity.lifecycleScope.launch {
             try { showMappings(device, session.api.mappings(device)) }
             catch (e: Exception) { view.snack(e.message ?: activity.getString(R.string.load_failed)) }
@@ -267,7 +284,21 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
         else -> activity.getString(R.string.tunnel_direct) to AppStatus.SUCCESS
     }
 
+    private fun formatConnectTime(value: String): String {
+        val numeric = value.toLongOrNull()
+        val date = if (numeric != null) {
+            Date(if (numeric < 1_000_000_000_000L) numeric * 1000L else numeric)
+        } else {
+            listOf("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", "yyyy-MM-dd'T'HH:mm:ssXXX", "yyyy-MM-dd HH:mm:ss")
+                .firstNotNullOfOrNull { pattern ->
+                    runCatching { SimpleDateFormat(pattern, Locale.getDefault()).parse(value) }.getOrNull()
+                }
+        }
+        return date?.let { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(it) } ?: value
+    }
+
     private fun showMappings(device: Device, mappings: List<PortMapping>) {
+        currentMappings = mappings
         activity.bottomSheet("${device.name} · ${activity.getString(R.string.port_mappings)}") { dialog ->
             action(activity.getString(R.string.new_mapping)) { dialog.dismiss(); editMapping(device, null) }
             if (mappings.isEmpty()) emptyState(activity.getString(R.string.no_mappings), activity.getString(R.string.no_mappings))
@@ -281,7 +312,7 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
                     addView(row)
                     label(activity.getString(R.string.mapping_route, mapping.protocol.uppercase(), mapping.srcPort, mapping.peerNode, mapping.dstPort), true).apply { typeface = Typeface.MONOSPACE }
                     if (mapping.active && mapping.connectTime.isNotBlank()) {
-                        keyValue(activity.getString(R.string.connect_time), mapping.connectTime)
+                        keyValue(activity.getString(R.string.connect_time), formatConnectTime(mapping.connectTime))
                     }
                     if (mapping.error.isNotBlank()) label(mapping.error, true).apply { setTextColor(activity.color(R.color.state_error)) }
                     val switch = SwitchMaterial(activity).apply {
@@ -307,44 +338,51 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
     }
 
     private fun editMapping(device: Device, old: PortMapping?) {
-        val value = old?.copy() ?: PortMapping()
+        val value = old?.copy() ?: PortMapping(appName = activity.getString(R.string.new_mapping_default_name), srcPort = 222, dstHost = "localhost")
         activity.bottomSheet(activity.getString(if (old == null) R.string.new_mapping else R.string.edit_mapping)) { dialog ->
             val name = field(activity.getString(R.string.mapping_name), value.appName)
             var protocol = value.protocol.ifBlank { "tcp" }
             val protocolButton = secondaryAction("${activity.getString(R.string.protocol)} · ${protocol.uppercase()}") {}
             protocolButton.setOnClickListener { activity.wheelPicker(activity.getString(R.string.protocol), listOf("TCP", "UDP"), if (protocol.equals("udp", true)) 1 else 0) { protocol = if (it == 0) "tcp" else "udp"; protocolButton.text = "${activity.getString(R.string.protocol)} · ${protocol.uppercase()}" } }
             val sourcePort = field(activity.getString(R.string.local_port), value.srcPort.takeIf { it > 0 }?.toString().orEmpty(), numeric = true)
-            var peer = devices.firstOrNull { it.name == value.peerNode } ?: devices.firstOrNull { it.active && it.name != device.name }
+            var peer = devices.firstOrNull { it.name == value.peerNode } ?: devices.firstOrNull { it.name != device.name }
+            if (old == null && value.dstPort == 0) value.dstPort = if (peer?.os?.contains("windows", true) == true) 3389 else 22
+            lateinit var destinationPort: android.widget.EditText
             val peerButton = secondaryAction("${activity.getString(R.string.remote_device)} · ${peer?.name ?: activity.getString(R.string.select_value)}") {}
             peerButton.setOnClickListener {
-                val options = devices.filter { it.active && it.name != device.name }
-                activity.wheelPicker(activity.getString(R.string.remote_device), options.map { it.remark.ifBlank { it.name } }, options.indexOf(peer).coerceAtLeast(0)) { peer = options[it]; peerButton.text = "${activity.getString(R.string.remote_device)} · ${peer?.name}" }
+                val options = devices.filter { it.name != device.name }
+                activity.wheelPicker(activity.getString(R.string.remote_device), options.map { it.remark.ifBlank { it.name } }, options.indexOf(peer).coerceAtLeast(0)) {
+                    peer = options[it]
+                    if (old == null) destinationPort.setText(if (peer?.os?.contains("windows", true) == true) "3389" else "22")
+                    peerButton.text = "${activity.getString(R.string.remote_device)} · ${peer?.name}"
+                }
             }
             val host = field(activity.getString(R.string.remote_address), value.dstHost.ifBlank { "127.0.0.1" })
-            val destinationPort = field(activity.getString(R.string.remote_port), value.dstPort.takeIf { it > 0 }?.toString().orEmpty(), numeric = true)
-            val whitelist = field(activity.getString(R.string.access_whitelist), value.whitelist, helper = "IPv4 / CIDR")
+            destinationPort = field(activity.getString(R.string.remote_port), value.dstPort.takeIf { it > 0 }?.toString().orEmpty(), numeric = true)
+            val whitelist = field(activity.getString(R.string.access_whitelist), value.whitelist)
             val priorities = activity.punchPriorityOptions()
             var priority = value.punchPriority.coerceIn(0, priorities.lastIndex)
             val priorityButton = secondaryAction("${activity.getString(R.string.punch_priority)} · ${priorities[priority]}") {}
             priorityButton.setOnClickListener { activity.wheelPicker(activity.getString(R.string.punch_priority), priorities, priority) { priority = it; priorityButton.text = "${activity.getString(R.string.punch_priority)} · ${priorities[it]}" } }
-            val relayOptions = listOf<Device?>(null) + devices.filter { it.active && it.name != device.name }
-            var relay = relayOptions.firstOrNull { it?.name == value.specRelayNode }
-            val relayButton = secondaryAction("${activity.getString(R.string.relay_node)} · ${relay?.name ?: activity.getString(R.string.not_specified)}") {}
-            relayButton.setOnClickListener { activity.wheelPicker(activity.getString(R.string.relay_node), relayOptions.map { it?.remark?.ifBlank { it.name } ?: activity.getString(R.string.not_specified) }, relayOptions.indexOf(relay).coerceAtLeast(0)) { relay = relayOptions[it]; relayButton.text = "${activity.getString(R.string.relay_node)} · ${relay?.name ?: activity.getString(R.string.not_specified)}" } }
+            val relay = field(activity.getString(R.string.relay_node), value.specRelayNode)
             val result = label("", true)
             secondaryAction(activity.getString(R.string.check_remote_service)) {
                 val target = peer; val portValue = destinationPort.intValue()
-                if (target == null || host.text.isNullOrBlank() || portValue !in 1..65535) result.text = activity.getString(R.string.remote_check_invalid)
+                if (!protocol.equals("tcp", true)) view.toast(activity.getString(R.string.remote_check_tcp_only))
+                else if (target == null || host.text.isNullOrBlank() || portValue !in 0..65535) view.toast(activity.getString(R.string.remote_check_invalid))
                 else activity.lifecycleScope.launch {
-                    try { session.api.checkRemote(target, host.text.toString(), portValue); result.text = activity.getString(R.string.remote_reachable); result.setTextColor(activity.color(R.color.state_success)) }
-                    catch (e: Exception) { result.text = e.message ?: activity.getString(R.string.operation_failed); result.setTextColor(activity.color(R.color.state_error)) }
+                    try { session.api.checkRemote(target, host.text.toString(), portValue); view.toast(activity.getString(R.string.remote_reachable)) }
+                    catch (e: Exception) { view.toast(e.message ?: activity.getString(R.string.operation_failed)) }
                 }
             }
             action(activity.getString(R.string.save_changes)) {
                 val target = peer; val src = sourcePort.intValue(); val dst = destinationPort.intValue()
-                if (name.text.isNullOrBlank() || target == null || src !in 1..65535 || dst !in 1..65535) { result.text = activity.getString(R.string.mapping_invalid); result.setTextColor(activity.color(R.color.state_error)); return@action }
-                value.appName = name.text.toString().trim(); value.protocol = protocol; value.srcPort = src; value.peerNode = target.name
-                value.dstHost = host.text.toString().trim(); value.dstPort = dst; value.whitelist = whitelist.text.toString().trim(); value.punchPriority = priority; value.specRelayNode = relay?.name.orEmpty()
+                val mappingName = name.text?.toString()?.trim().orEmpty()
+                val duplicate = currentMappings.any { it.protocol.equals(protocol, true) && it.srcPort == src && it !== old }
+                if (mappingName.length !in 1..32 || target == null || src !in 0..65535 || dst !in 0..65535) { result.text = activity.getString(R.string.mapping_invalid); result.setTextColor(activity.color(R.color.state_error)); return@action }
+                if (duplicate) { result.text = activity.getString(R.string.mapping_port_conflict); result.setTextColor(activity.color(R.color.state_error)); return@action }
+                value.appName = mappingName; value.protocol = protocol; value.srcPort = src; value.peerNode = target.name
+                value.dstHost = host.text.toString().trim(); value.dstPort = dst; value.whitelist = whitelist.text.toString().trim(); value.punchPriority = priority; value.specRelayNode = relay.text?.toString()?.trim().orEmpty()
                 runApi(device, activity.getString(R.string.mapping_saved), { session.api.saveMapping(device, old, value, target.edgeServer) }) { dialog.dismiss(); openMappings(device) }
             }
         }

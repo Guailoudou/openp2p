@@ -6,7 +6,9 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.text.InputType
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -26,6 +28,7 @@ import com.google.android.material.card.MaterialCardView
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import kotlin.math.abs
 
 fun Context.punchPriorityOptions() = listOf(
     getString(R.string.priority_default), getString(R.string.priority_tcp_first),
@@ -296,6 +299,98 @@ fun Context.wheelPicker(title: String, values: List<String>, selected: Int = 0, 
 
 fun View.snack(message: String, duration: Int = Snackbar.LENGTH_SHORT) = Snackbar.make(this, message, duration).show()
 fun View.toast(message: String) = Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+
+class SwipeActionLayout(context: Context) : FrameLayout(context) {
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+    private lateinit var foreground: View
+    private lateinit var actions: View
+    private var downX = 0f
+    private var downY = 0f
+    private var startTranslation = 0f
+    private var dragging = false
+    private var horizontalSwipeStateChanged: ((Boolean) -> Unit)? = null
+
+    fun setOnHorizontalSwipeStateChanged(listener: (Boolean) -> Unit) {
+        horizontalSwipeStateChanged = listener
+    }
+
+    private fun setDragging(value: Boolean) {
+        if (dragging == value) return
+        dragging = value
+        horizontalSwipeStateChanged?.invoke(value)
+    }
+
+    fun setViews(content: View, actionView: View) {
+        removeAllViews()
+        foreground = content
+        actions = actionView
+        addView(actionView, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT, Gravity.END))
+        addView(content, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+    }
+
+    override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+                startTranslation = if (::foreground.isInitialized) foreground.translationX else 0f
+                setDragging(false)
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = event.x - downX
+                val dy = event.y - downY
+                if (abs(dx) > touchSlop && abs(dx) > abs(dy)) {
+                    setDragging(true)
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                    return true
+                }
+            }
+        }
+        return super.onInterceptTouchEvent(event)
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (!::foreground.isInitialized || !::actions.isInitialized) return false
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+                startTranslation = foreground.translationX
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = event.x - downX
+                val dy = event.y - downY
+                if (!dragging && abs(dx) > touchSlop && abs(dx) > abs(dy)) setDragging(true)
+                if (dragging) {
+                    val width = actions.width.toFloat().coerceAtLeast(0f)
+                    foreground.translationX = (startTranslation + dx).coerceIn(-width, 0f)
+                    return true
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (dragging) {
+                    val width = actions.width.toFloat().coerceAtLeast(0f)
+                    val open = event.actionMasked == MotionEvent.ACTION_UP && foreground.translationX <= -width / 3f
+                    foreground.animate().translationX(if (open) -width else 0f).setDuration(160).start()
+                    setDragging(false)
+                    parent?.requestDisallowInterceptTouchEvent(false)
+                    return true
+                }
+            }
+        }
+        return super.onTouchEvent(event)
+    }
+}
+
+fun Context.swipeActions(
+    content: View,
+    actions: View,
+    onHorizontalSwipeStateChanged: (Boolean) -> Unit = {}
+): SwipeActionLayout = SwipeActionLayout(this).apply {
+    setViews(content, actions)
+    setOnHorizontalSwipeStateChanged(onHorizontalSwipeStateChanged)
+}
 
 fun String.maskSensitive(): String = replace(Regex("(?i)(token|password|authorization)([\\s:=]+)([^\\s,;]+)")) {
     "${it.groupValues[1]}${it.groupValues[2]}••••••••"

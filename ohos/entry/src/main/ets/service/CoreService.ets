@@ -158,7 +158,18 @@ export class CoreService {
       this.removeFile(CORE_CHECK_REQUEST_FILE);
       return;
     }
+    const foregroundStatus = this.readStatus();
     this.writeText(CORE_CHECK_REQUEST_FILE, String(Date.now()));
+    // The VPN extension polls this file every 250 ms. If the request remains,
+    // its process and watchdog are no longer alive, regardless of a fresh
+    // status file left behind by the previous process.
+    await this.sleep(750);
+    if (this.fileExists(CORE_CHECK_REQUEST_FILE) && this.isWatchdogExpectedState(foregroundStatus.state)) {
+      hilog.warn(DOMAIN, TAG, 'Foreground core check was not consumed; restarting VPN extension');
+      this.removeFile(CORE_CHECK_REQUEST_FILE);
+      await this.recoverIfNeeded(true);
+      return;
+    }
     await this.recoverIfNeeded();
   }
 
@@ -243,14 +254,14 @@ export class CoreService {
     await this.backgroundKeepAlive.stop();
   }
 
-  async recoverIfNeeded(): Promise<boolean> {
+  async recoverIfNeeded(force: boolean = false): Promise<boolean> {
     if (!this.runtimeStateStore.isDesiredRunning()) {
       return false;
     }
 
     const status = this.readStatus();
     const age = status.timestamp > 0 ? Date.now() - status.timestamp : Number.MAX_SAFE_INTEGER;
-    if (this.isRunningState(status.state) && age <= HEARTBEAT_STALE_MS) {
+    if (!force && this.isRunningState(status.state) && age <= HEARTBEAT_STALE_MS) {
       await this.applyBackgroundStrategies();
       return false;
     }
@@ -359,6 +370,15 @@ export class CoreService {
     }
   }
 
+  private fileExists(name: string): boolean {
+    try {
+      return fileIo.accessSync(`${this.filesDir}/${name}`);
+    } catch (error) {
+      hilog.warn(DOMAIN, TAG, 'Unable to check file %{public}s: %{public}s', name, JSON.stringify(error));
+      return false;
+    }
+  }
+
   private emptyStatus(state: string, message: string): CoreStatus {
     return { state, message, timestamp: 0, requestId: 0 };
   }
@@ -367,6 +387,11 @@ export class CoreService {
     return value === 'requested' || value === 'starting' || value === 'core_starting' ||
       value === 'core_started' || value === 'core_restarting' || value === 'vpn_requested' ||
       value === 'vpn_starting' || value === 'vpn_waiting_config' || value === 'vpn_ready';
+  }
+
+  private isWatchdogExpectedState(value: string): boolean {
+    return value === 'core_started' || value === 'vpn_requested' || value === 'vpn_starting' ||
+      value === 'vpn_waiting_config' || value === 'vpn_ready';
   }
 
   private isCoreActive(): boolean {

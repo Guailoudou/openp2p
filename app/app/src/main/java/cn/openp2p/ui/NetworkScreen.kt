@@ -1,7 +1,10 @@
 package cn.openp2p.ui
 
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.graphics.Typeface
 import android.view.Gravity
+import android.view.Menu
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.RadioButton
@@ -9,6 +12,7 @@ import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
+import androidx.appcompat.widget.PopupMenu
 import androidx.lifecycle.lifecycleScope
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import cn.openp2p.R
@@ -97,7 +101,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
         if (config.nodes.isEmpty()) body.emptyState(activity.getString(R.string.network_members), activity.getString(R.string.no_members))
         config.nodes.forEach { member ->
             val device = devices.firstOrNull { it.name == member.name }
-            body.addView(activity.card {
+            val card = activity.card {
                 val header = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
                 header.addView(TextView(activity).apply {
                     text = member.name; textSize = 16f; setTypeface(typeface, Typeface.BOLD); setTextColor(activity.color(R.color.text_primary))
@@ -108,7 +112,12 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                 if (member.resource.isNotBlank()) label(member.resource, true)
                 minimumHeight = activity.dp(72)
                 setOnClickListener { editMember(member) }
-            }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(12) })
+                setOnLongClickListener { anchor -> showMemberMenu(anchor, member); true }
+            }
+            body.addView(activity.swipeActions(card, memberSwipeActions(member)) { swiping ->
+                swipe.isEnabled = !swiping
+            },
+                LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(12) })
         }
         body.secondaryAction(activity.getString(R.string.add_device)) { chooseAvailableDevice() }
         val save = body.action(activity.getString(R.string.save_network_config)) {}
@@ -117,10 +126,56 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
         }
     }
 
+    private fun memberSwipeActions(member: SdwanMember): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        fun addAction(label: String, color: Int, action: () -> Unit) {
+            addView(MaterialButton(activity).apply {
+                text = label
+                minWidth = activity.dp(72)
+                minimumWidth = activity.dp(72)
+                setTextColor(Color.WHITE)
+                backgroundTintList = ColorStateList.valueOf(activity.color(color))
+                setOnClickListener { action() }
+            }, LinearLayout.LayoutParams(activity.dp(76), -1))
+        }
+        addAction(activity.getString(R.string.edit), R.color.brand_primary) { editMember(member) }
+        addAction(activity.getString(R.string.remove), R.color.state_error) { requestRemoveMember(member) }
+    }
+
+    private fun showMemberMenu(anchor: View, member: SdwanMember) {
+        PopupMenu(activity, anchor).apply {
+            menu.add(Menu.NONE, 1, 0, R.string.edit)
+            menu.add(Menu.NONE, 2, 1, R.string.remove_from_network)
+            setOnMenuItemClickListener {
+                when (it.itemId) {
+                    1 -> editMember(member)
+                    2 -> requestRemoveMember(member)
+                }
+                true
+            }
+            show()
+        }
+    }
+
+    private fun requestRemoveMember(member: SdwanMember) {
+        activity.confirm(activity.getString(R.string.remove_from_network),
+            activity.getString(R.string.remove_member_confirm, member.name), activity.getString(R.string.remove), true) {
+            val previous = config.snapshot()
+            config.nodes.removeAll { it.name == member.name }
+            if (config.centralNode == member.name) config.centralNode = ""
+            render()
+            persistConfig(config.snapshot(), null, failed = {
+                config = previous
+                render()
+            }) { load() }
+        }
+    }
+
     private fun editNetworkConfig() {
         val draft = config.copy(nodes = config.nodes.map { it.copy() }.toMutableList())
         activity.bottomSheet(activity.getString(R.string.edit_network_config)) { dialog ->
-            val gateway = field(activity.getString(R.string.network_address), draft.gateway, helper = "IPv4 CIDR · 10.0.0.0/24")
+            val gateway = field(activity.getString(R.string.network_address), draft.gateway)
             sectionHeader(activity.getString(R.string.network_mode))
             val mode = RadioGroup(activity).apply { orientation = RadioGroup.VERTICAL }
             val full = RadioButton(activity).apply { text = activity.getString(R.string.network_mode_fullmesh); id = View.generateViewId(); minHeight = activity.dp(48) }
@@ -141,13 +196,13 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                 relay.visibility = if (mode.checkedRadioButtonId == central.id) View.GONE else View.VISIBLE
             }
             centralButton.setOnClickListener {
-                val options = devices.filter { eligible(it) }
+                val options = listOf<String?>(null) + draft.nodes.map { it.name }.distinct()
                 val label = activity.getString(
                     if (mode.checkedRadioButtonId == central.id) R.string.central_node else R.string.specified_relay_node
                 )
-                activity.wheelPicker(label, options.map { it.remark.ifBlank { it.name } }, options.indexOfFirst { it.name == centralNode }.coerceAtLeast(0)) {
-                    centralNode = options[it].name
-                    centralButton.text = "$label · $centralNode"
+                activity.wheelPicker(label, options.map { it ?: activity.getString(R.string.not_specified) }, options.indexOf(centralNode.ifBlank { null }).coerceAtLeast(0)) {
+                    centralNode = options[it].orEmpty()
+                    centralButton.text = "$label · ${centralNode.ifBlank { activity.getString(R.string.not_specified) }}"
                 }
             }
             mode.setOnCheckedChangeListener { _, _ -> updateModeControls() }
@@ -163,7 +218,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                 if (!isCidr(address)) { gateway.showError(activity.getString(R.string.network_address_invalid)); return@setOnClickListener }
                 val centralMode = mode.checkedRadioButtonId == central.id
                 if (centralMode && centralNode.isBlank()) { view.snack(activity.getString(R.string.central_node_required)); return@setOnClickListener }
-                draft.gateway = address
+                updateMemberGateway(draft, address)
                 draft.mode = if (centralMode) "central" else "fullmesh"
                 draft.centralNode = centralNode
                 draft.forceRelay = if (relay.isChecked) 1 else 0
@@ -183,7 +238,9 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
         if (options.isEmpty()) { view.snack(activity.getString(R.string.no_eligible_device)); return }
         activity.wheelPicker(activity.getString(R.string.add_device), options.map { it.remark.ifBlank { it.name } }) { index ->
             val device = options[index]
-            val member = SdwanMember(device.name, nextAddress(config.gateway, config.nodes.size + 2))
+            val address = nextAvailableAddress(config)
+            if (address.isBlank()) { view.toast(activity.getString(R.string.no_available_virtual_ip)); return@wheelPicker }
+            val member = SdwanMember(device.name, address, active = device.active)
             config.nodes += member
             editMember(member, true)
         }
@@ -194,7 +251,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
         val originalResource = member.resource
         activity.bottomSheet(activity.getString(R.string.network_member)) { dialog ->
             label(member.name)
-            val ip = field(activity.getString(R.string.virtual_ip), member.ip, helper = "IPv4 · 10.0.0.2")
+            val ip = field(activity.getString(R.string.virtual_ip), member.ip)
             val resources = field(activity.getString(R.string.resources), member.resource)
             val status = label("", true)
             val tunnels = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
@@ -202,7 +259,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
             val loadStatus: () -> Unit = {
                 val device = devices.firstOrNull { it.name == member.name }
                 tunnels.removeAllViews()
-                if (device == null || !device.active) {
+                if (device == null) {
                     status.text = activity.getString(R.string.device_offline)
                     status.setTextColor(activity.color(R.color.state_warning))
                 } else activity.lifecycleScope.launch {
@@ -227,10 +284,6 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                                     val state = tunnelStatus(tunnel)
                                     header.addView(activity.statusChip(state.first, state.second))
                                     addView(header)
-                                    val connectTime = tunnel.optString("connectTime")
-                                    if (tunnel.optInt("isActive") == 1 && connectTime.isNotBlank()) {
-                                        keyValue(activity.getString(R.string.connect_time), connectTime)
-                                    }
                                     val tunnelError = tunnel.optString("error")
                                     if (tunnel.optInt("isActive") != 1 && tunnelError.isNotBlank()) {
                                         label(tunnelError, true).apply { setTextColor(activity.color(R.color.state_error)) }
@@ -239,8 +292,12 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                             }
                         }
                     } catch (e: Exception) {
-                        status.text = e.message ?: activity.getString(R.string.check_failed)
-                        status.setTextColor(activity.color(R.color.state_error))
+                        status.text = if (device.active) {
+                            e.message ?: activity.getString(R.string.check_failed)
+                        } else {
+                            activity.getString(R.string.device_offline)
+                        }
+                        status.setTextColor(activity.color(if (device.active) R.color.state_error else R.color.state_warning))
                     }
                 }
             }
@@ -255,7 +312,12 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                     else -> {
                         member.ip = address
                         member.resource = resources.text?.toString()?.trim().orEmpty()
-                        persistConfig(config.snapshot(), save, R.string.save_member) {
+                        persistConfig(config.snapshot(), save, R.string.save_member, failed = {
+                            member.ip = originalIp
+                            member.resource = originalResource
+                            if (isNew) config.nodes.remove(member)
+                            render()
+                        }) {
                             dialog.dismiss()
                             load()
                         }
@@ -263,11 +325,8 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                 }
             }
             destructiveAction(activity.getString(R.string.remove_from_network)) {
-                activity.confirm(activity.getString(R.string.remove_from_network), activity.getString(R.string.remove_member_confirm, member.name), activity.getString(R.string.remove), true) {
-                    config.nodes.remove(member)
-                    dialog.dismiss()
-                    persistConfig(config.snapshot(), null) { load() }
-                }
+                dialog.dismiss()
+                requestRemoveMember(member)
             }
             dialog.setOnCancelListener {
                 member.ip = originalIp
@@ -285,6 +344,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
         value: SdwanConfig,
         button: MaterialButton?,
         idleTextRes: Int = R.string.save_network_config,
+        failed: (() -> Unit)? = null,
         complete: () -> Unit
     ) {
         val idleText = activity.getString(idleTextRes)
@@ -294,10 +354,11 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                 session.api.saveSdwan(value)
                 value.nodes.mapNotNull { member -> devices.firstOrNull { it.name == member.name && it.active } }
                     .forEach { session.api.refreshSdwanNode(it) }
-                view.snack(activity.getString(R.string.network_saved))
+                view.toast(activity.getString(R.string.network_saved))
                 complete()
             } catch (e: Exception) {
-                view.snack(e.message ?: activity.getString(R.string.operation_failed))
+                view.toast(e.message ?: activity.getString(R.string.operation_failed))
+                failed?.invoke()
             } finally {
                 button?.setLoading(false, idleText, activity.getString(R.string.please_wait))
             }
@@ -316,9 +377,22 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
         return 0
     }
 
-    private fun nextAddress(gateway: String, index: Int): String {
+    private fun nextAvailableAddress(value: SdwanConfig): String {
+        val base = value.gateway.substringBefore('/').split('.')
+        if (base.size != 4) return ""
+        val prefix = "${base[0]}.${base[1]}.${base[2]}"
+        return (1..254).map { "$prefix.$it" }.firstOrNull { candidate -> value.nodes.none { it.ip == candidate } }.orEmpty()
+    }
+
+    private fun updateMemberGateway(value: SdwanConfig, gateway: String) {
         val base = gateway.substringBefore('/').split('.')
-        return if (base.size == 4) "${base[0]}.${base[1]}.${base[2]}.${index.coerceAtMost(254)}" else "10.0.0.${index.coerceAtMost(254)}"
+        if (base.size == 4) {
+            val prefix = "${base[0]}.${base[1]}.${base[2]}"
+            value.nodes.forEach { member ->
+                member.ip.substringAfterLast('.', "").takeIf { it.isNotBlank() }?.let { member.ip = "$prefix.$it" }
+            }
+        }
+        value.gateway = gateway
     }
 
     private fun isIpv4(value: String): Boolean {
