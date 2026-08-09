@@ -9,7 +9,6 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
-import android.provider.Settings
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import cn.openp2p.security.SecureCredentialStore
@@ -187,16 +186,7 @@ class OpenP2PService : VpnService() {
         }
     }
 
-    private fun deviceNodeCandidate(): String {
-        val configuredName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
-            Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME)
-        } else {
-            null
-        }
-        return configuredName?.trim().takeUnless { it.isNullOrEmpty() }
-            ?: Build.MODEL?.trim().takeUnless { it.isNullOrEmpty() }
-            ?: "Android-device"
-    }
+    private fun deviceNodeCandidate(): String = DeviceNameResolver.resolve(this)
 
     private fun startWatchdog() {
         watchdogJob?.cancel()

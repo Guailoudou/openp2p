@@ -15,6 +15,9 @@
         "name": "ohos.permission.GET_NETWORK_INFO"
       },
       {
+        "name": "ohos.permission.READ_LOCAL_DEVICE_NAME"
+      },
+      {
         "name": "ohos.permission.KEEP_BACKGROUND_RUNNING"
       },
       {

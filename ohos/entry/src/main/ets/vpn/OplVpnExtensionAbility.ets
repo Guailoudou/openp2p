@@ -2,7 +2,7 @@ import VpnExtensionAbility from '@ohos.app.ability.VpnExtensionAbility';
 import vpnExtension from '@ohos.net.vpnExtension';
 import { Want } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
-import { deviceInfo } from '@kit.BasicServicesKit';
+import { deviceInfo, settings } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import coreNative from 'libentry.so';
 import { RuntimeStateStore } from '../service/RuntimeStateStore';
@@ -716,6 +716,14 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
   }
 
   private deviceNodeCandidate(): string {
+    try {
+      const deviceName = settings.getValueSync(this.context, settings.general.DEVICE_NAME, '').trim();
+      if (deviceName.length > 0 && deviceName !== 'default') {
+        return deviceName;
+      }
+    } catch (error) {
+      hilog.warn(DOMAIN, TAG, 'Unable to read local device name: %{public}s', this.formatError(error));
+    }
     const marketName = deviceInfo.marketName.trim();
     if (marketName.length > 0 && marketName !== 'default') {
       return marketName;

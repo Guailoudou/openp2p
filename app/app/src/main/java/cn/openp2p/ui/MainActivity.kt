@@ -1,6 +1,7 @@
 package cn.openp2p.ui
 
 import android.app.Activity
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -23,12 +24,14 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import cn.openp2p.Logger
+import cn.openp2p.DeviceNameResolver
 import cn.openp2p.OpenP2PService
 import cn.openp2p.R
 import cn.openp2p.management.ManagementSession
@@ -306,9 +309,29 @@ class MainActivity : AppCompatActivity() {
             showHome()
             return
         }
+        val bluetoothPermissionAsked = prefs.getBoolean(KEY_BLUETOOTH_PERMISSION_ASKED, false)
+        if (!bluetoothPermissionAsked && DeviceNameResolver.shouldRequestBluetoothPermission(this)) {
+            prefs.edit().putBoolean(KEY_BLUETOOTH_PERMISSION_ASKED, true).apply()
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
+                BLUETOOTH_NAME_REQUEST
+            )
+            return
+        }
+        requestVpnAndStartCore(prefs)
+    }
+
+    private fun requestVpnAndStartCore(prefs: android.content.SharedPreferences =
+        getSharedPreferences(OpenP2PService.PREFERENCES, MODE_PRIVATE)) {
         val prepare = VpnService.prepare(this)
         prefs.edit().putBoolean(OpenP2PService.KEY_VPN_PERMISSION_REQUIRED, prepare != null).apply()
         if (prepare != null) startActivityForResult(prepare, VPN_REQUEST) else startCore()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == BLUETOOTH_NAME_REQUEST) requestVpnAndStartCore()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -548,6 +571,8 @@ class MainActivity : AppCompatActivity() {
         private const val LOGS = 4
         private const val PROFILE = 5
         private const val VPN_REQUEST = 100
+        private const val BLUETOOTH_NAME_REQUEST = 101
+        private const val KEY_BLUETOOTH_PERMISSION_ASKED = "bluetooth_name_permission_asked"
         private const val STATE_SELECTED = "selected_navigation"
         private const val CONSOLE_URL = "https://console.openpxp.com/"
     }
