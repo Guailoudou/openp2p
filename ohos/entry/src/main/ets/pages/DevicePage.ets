@@ -50,6 +50,49 @@ export struct DevicePage {
     return device && device.edgeServer ? device.edgeServer : '';
   }
 
+  private mappingStatus(mapping: PortMapping): string {
+    if (mapping.enabled !== 1) {
+      return '已停用';
+    }
+    if (mapping.isActive !== 1) {
+      return mapping.error && mapping.error.length > 0 ? '连接失败' : '连接中';
+    }
+    if (mapping.relayMode === 'public') {
+      return '中继';
+    }
+    if (mapping.relayMode === 'private') {
+      return '中继（私有网络）';
+    }
+    if (mapping.linkMode === 'ipv6') {
+      return 'IPv6 直连';
+    }
+    if (mapping.linkMode === 'intranet') {
+      return '内网直连';
+    }
+    return '直连';
+  }
+
+  private formatConnectTime(value: string): string {
+    const numeric = Number(value);
+    const timestamp = Number.isNaN(numeric) ? Date.parse(value) :
+      (numeric < 1000000000000 ? numeric * 1000 : numeric);
+    if (Number.isNaN(timestamp)) {
+      return value;
+    }
+    const date = new Date(timestamp);
+    const pad = (part: number): string => part < 10 ? `0${part}` : String(part);
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+      `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
+
+  private showToast(message: string): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({ message: message });
+    } catch (_) {
+      this.message = message;
+    }
+  }
+
   private sheetTitle(): string {
     if (this.sheetMode === 'editDevice') {
       return '编辑设备';
@@ -154,6 +197,36 @@ export struct DevicePage {
       MenuItem({ content: '删除设备' })
         .onClick((): void => { this.handleDeviceMenuAction(device, 'delete'); })
     }.width(220)
+  }
+
+  @Builder
+  private deviceSwipeActions(device: ManagementDevice) {
+    Row() {
+      if (device.isActive === 1) {
+        Button('映射')
+          .width(68).height(124).borderRadius(0)
+          .fontColor($r('app.color.button_text')).backgroundColor($r('app.color.accent'))
+          .onClick((): void => { this.handleDeviceMenuAction(device, 'mappings'); })
+        Button('编辑')
+          .width(68).height(124).borderRadius(0)
+          .fontColor($r('app.color.button_text')).backgroundColor($r('app.color.accent'))
+          .onClick((): void => { this.handleDeviceMenuAction(device, 'edit'); })
+        if (this.upgradeUnavailableReason(device).length === 0) {
+          Button('升级')
+            .width(68).height(124).borderRadius(0)
+            .fontColor($r('app.color.button_text')).backgroundColor($r('app.color.status_connected'))
+            .onClick((): void => { this.handleDeviceMenuAction(device, 'update'); })
+        }
+        Button('重启')
+          .width(68).height(124).borderRadius(0)
+          .fontColor($r('app.color.button_text')).backgroundColor($r('app.color.status_connecting'))
+          .onClick((): void => { this.handleDeviceMenuAction(device, 'restart'); })
+      }
+      Button('删除')
+        .width(68).height(124).borderRadius(0)
+        .fontColor($r('app.color.button_text')).backgroundColor($r('app.color.danger'))
+        .onClick((): void => { this.handleDeviceMenuAction(device, 'delete'); })
+    }.height(124).borderRadius(18).clip(true)
   }
 
   private openDeviceEditor(): void {
@@ -299,6 +372,7 @@ export struct DevicePage {
   private async openMappings(): Promise<void> {
     const device = this.selectedDevice();
     if (!device || device.isActive !== 1) {
+      this.mappings = [];
       this.message = '设备离线，无法读取端口映射';
       return;
     }
@@ -435,15 +509,15 @@ export struct DevicePage {
 
   private async checkRemote(): Promise<void> {
     if (this.mappingProtocol !== 'tcp') {
-      this.message = '远端服务检测仅支持 TCP';
+      this.showToast('远端服务检测仅支持 TCP');
       return;
     }
     try {
       const response = await this.session.api.checkRemote(this.mappingPeerNode,
         this.edgeServer(this.mappingPeerNode), this.mappingTargetHost, Number(this.mappingTargetPort));
-      this.message = response.error ? '远端服务不可达' : '远端服务可达';
+      this.showToast(response.error ? '远端服务不可达' : '远端服务可达');
     } catch (error) {
-      this.message = `检测失败：${String(error)}`;
+      this.showToast(`检测失败：${String(error)}`);
     }
   }
 
@@ -527,6 +601,23 @@ export struct DevicePage {
                   Toggle({ type: ToggleType.Switch, isOn: mapping.enabled === 1 })
                     .onChange((): void => { this.toggleMapping(index); })
                 }.width('100%')
+                Row({ space: 8 }) {
+                  Text(this.mappingStatus(mapping))
+                    .fontSize(12)
+                    .fontColor(mapping.enabled !== 1 ? $r('app.color.status_idle') :
+                      (mapping.isActive === 1 ? $r('app.color.accent') : $r('app.color.status_connecting')))
+                    .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+                    .backgroundColor(mapping.isActive === 1 && mapping.enabled === 1 ?
+                      $r('app.color.accent_soft') : $r('app.color.badge_background'))
+                    .borderRadius(12)
+                  if (mapping.connectTime && mapping.connectTime.length > 0 && mapping.isActive === 1) {
+                    Text(this.formatConnectTime(mapping.connectTime))
+                      .fontSize(12).fontColor($r('app.color.text_tertiary'))
+                  }
+                }.width('100%')
+                if (mapping.error && mapping.error.length > 0) {
+                  Text(mapping.error).width('100%').fontSize(12).fontColor($r('app.color.status_failed'))
+                }
                 Row({ space: 10 }) {
                   Button('编辑').layoutWeight(1).onClick((): void => { this.openMappingEditor(index); })
                   Button('删除').layoutWeight(1).fontColor(Color.Red)
@@ -574,7 +665,8 @@ export struct DevicePage {
               .fontSize(18).fontColor([$r('app.color.text_secondary')])
           }.width('100%')
         }
-        .width('100%').height(48).backgroundColor($r('app.color.page_background'))
+        .width('100%').height(48).padding({ left: 20, right: 16 })
+        .backgroundColor($r('app.color.page_background'))
         .onClick((): void => { this.showPeerDevicePicker(); })
         Row({ space: 10 }) {
           Column({ space: 6 }) {
@@ -671,33 +763,48 @@ export struct DevicePage {
             LoadingProgress().width(42).height(42).margin({ top: 48 })
           } else if (this.devices.length === 0) {
             Text('暂无设备').fontSize(16).fontColor($r('app.color.text_secondary')).padding(48)
-          } else {
-            ForEach(this.devices, (device: ManagementDevice) => {
-              Column({ space: 12 }) {
-                Row() {
-                  Column({ space: 4 }) {
-                    Text(device.remark ? device.remark : device.name)
-                      .fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
-                    Text(device.name).fontSize(12).fontColor($r('app.color.text_tertiary'))
-                  }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-                  Text(device.isActive === 1 ? '在线' : '离线')
-                    .fontSize(13).fontColor(device.isActive === 1 ? Color.Green : $r('app.color.text_tertiary'))
-                }.width('100%')
-                Row() {
-                  Text(`${device.os} · ${device.version}`).fontSize(13).fontColor($r('app.color.text_secondary'))
-                  Blank()
-                  Text(device.lanip).fontSize(13).fontColor($r('app.color.text_secondary'))
-                }.width('100%')
-                Row() {
-                  Text('公网 IP').fontSize(13).fontColor($r('app.color.text_tertiary'))
-                  Blank()
-                  Text(device.ip).fontSize(13).fontColor($r('app.color.text_secondary'))
-                }.width('100%')
-              }
-              .width('100%').padding(18).backgroundColor($r('app.color.card_background')).borderRadius(18)
-              .shadow({ radius: 12, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 4 })
-              .bindContextMenu(this.deviceContextMenu(device), ResponseType.LongPress)
-            }, (device: ManagementDevice): string => this.deviceCardKey(device))
+           } else {
+             ForEach(this.devices, (device: ManagementDevice) => {
+               List() {
+                 ListItem() {
+                   Column({ space: 12 }) {
+                     Row() {
+                       Column({ space: 4 }) {
+                         Text(device.remark ? device.remark : device.name)
+                           .fontSize(18).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary'))
+                         Text(device.name).fontSize(12).fontColor($r('app.color.text_tertiary'))
+                       }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+                       Text(device.isActive === 1 ? '在线' : '离线')
+                         .fontSize(13)
+                         .fontColor(device.isActive === 1 ? Color.Green : $r('app.color.text_tertiary'))
+                     }.width('100%')
+                     Row() {
+                       Text(`${device.os} · ${device.version}`)
+                         .fontSize(13).fontColor($r('app.color.text_secondary'))
+                       Blank()
+                       Text(device.lanip).fontSize(13).fontColor($r('app.color.text_secondary'))
+                     }.width('100%')
+                     Row() {
+                       Text('公网 IP').fontSize(13).fontColor($r('app.color.text_tertiary'))
+                       Blank()
+                       Text(device.ip).fontSize(13).fontColor($r('app.color.text_secondary'))
+                     }.width('100%')
+                   }
+                   .width('100%').height(124).padding(18)
+                   .backgroundColor($r('app.color.card_background')).borderRadius(18)
+                   .shadow({ radius: 12, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 4 })
+                 }
+                 .swipeAction({
+                   end: {
+                     builder: (): void => { this.deviceSwipeActions(device); }
+                   },
+                   edgeEffect: SwipeEdgeEffect.None
+                 })
+                 .onClick((): void => { this.handleDeviceMenuAction(device, 'mappings'); })
+                 .bindContextMenu(this.deviceContextMenu(device), ResponseType.LongPress)
+               }
+               .width('100%').height(124).scrollBar(BarState.Off).edgeEffect(EdgeEffect.None)
+             }, (device: ManagementDevice): string => this.deviceCardKey(device))
           }
         }
         .width('100%').padding({ left: 20, right: 20, top: 24, bottom: 128 })

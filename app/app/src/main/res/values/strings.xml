@@ -198,4 +198,15 @@
     <string name="no_browser_available">No browser is available.</string>
     <string name="open_console_for_token">Open console to get Token</string>
     <string name="status_not_running">Stopped</string>
+    <string name="tunnel_disabled">Disabled</string>
+    <string name="tunnel_failed">Connection failed</string>
+    <string name="tunnel_connecting">Connecting</string>
+    <string name="tunnel_relay">Relay</string>
+    <string name="tunnel_private_relay">Relay (private network)</string>
+    <string name="tunnel_direct">Direct</string>
+    <string name="tunnel_direct_ipv6">IPv6 direct</string>
+    <string name="tunnel_direct_intranet">LAN direct</string>
+    <string name="connect_time">Connected at</string>
+    <string name="member_tunnels">Member tunnels</string>
+    <string name="unknown_device">Unknown device</string>
 </resources>

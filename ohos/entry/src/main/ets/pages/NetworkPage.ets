@@ -30,6 +30,39 @@ export struct NetworkPage {
   private refreshInFlight: boolean = false;
   private session: ManagementSession = ManagementSession.getInstance();
 
+  private tunnelStatus(mapping: PortMapping): string {
+    if (mapping.isActive === undefined) {
+      return '离线';
+    }
+    if (mapping.enabled !== undefined && mapping.enabled !== 1) {
+      return '已停用';
+    }
+    if (mapping.isActive !== 1) {
+      return mapping.error && mapping.error.length > 0 ? '连接失败' : '连接中';
+    }
+    if (mapping.relayMode === 'public') {
+      return '中继';
+    }
+    if (mapping.relayMode === 'private') {
+      return '中继（私有网络）';
+    }
+    if (mapping.linkMode === 'ipv6') {
+      return 'IPv6 直连';
+    }
+    if (mapping.linkMode === 'intranet') {
+      return '内网直连';
+    }
+    return '直连';
+  }
+
+  private showToast(message: string): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({ message: message });
+    } catch (_) {
+      this.message = message;
+    }
+  }
+
   aboutToAppear(): void {
     this.loadData();
   }
@@ -41,11 +74,23 @@ export struct NetworkPage {
       const deviceResponse = await this.session.api.getDevices();
       this.devices = deviceResponse.nodes ? deviceResponse.nodes : [];
       const config = await this.session.api.getSdwan();
-      config.Nodes.forEach((member: SdwanMember): void => {
+      const refreshedNodes: SdwanMember[] = config.Nodes.map((member: SdwanMember): SdwanMember => {
         const device = this.devices.find((item: ManagementDevice): boolean => item.name === member.name);
-        member.isActive = device ? device.isActive : 0;
+        return {
+          name: member.name,
+          ip: member.ip,
+          resource: member.resource ? member.resource : '',
+          isActive: device ? device.isActive : 0
+        };
       });
-      this.config = config;
+      this.config = {
+        gateway: config.gateway,
+        mode: config.mode,
+        centralNode: config.centralNode,
+        forceRelay: config.forceRelay,
+        punchPriority: config.punchPriority,
+        Nodes: refreshedNodes
+      };
     } catch (error) {
       this.message = `加载网络配置失败：${String(error)}`;
     } finally {
@@ -187,6 +232,32 @@ export struct NetworkPage {
     }
   }
 
+  @Builder
+  private memberSwipeActions(member: SdwanMember, index: number) {
+    Row() {
+      Button('编辑')
+        .width(76).height(64).borderRadius(0)
+        .fontColor($r('app.color.button_text'))
+        .backgroundColor($r('app.color.accent'))
+        .onClick((): void => { this.openMember(member); })
+      Button('移除')
+        .width(76).height(64).borderRadius(0)
+        .fontColor($r('app.color.button_text'))
+        .backgroundColor($r('app.color.danger'))
+        .onClick((): void => { this.removeMember(index); })
+    }.height(64).borderRadius(14).clip(true)
+  }
+
+  @Builder
+  private memberContextMenu(member: SdwanMember, index: number) {
+    Menu() {
+      MenuItem({ content: '编辑成员' })
+        .onClick((): void => { this.openMember(member); })
+      MenuItem({ content: '移除成员' })
+        .onClick((): void => { this.removeMember(index); })
+    }.width(180)
+  }
+
   private updateGateway(value: string): void {
     this.config.gateway = value;
     const base = value.split('/')[0].split('.');
@@ -247,11 +318,11 @@ export struct NetworkPage {
 
   private async saveNetwork(): Promise<boolean> {
     if (!this.isValidCidr(this.config.gateway)) {
-      this.message = '网关必须使用正确的 IPv4/CIDR 格式';
+      this.showToast('网关必须使用正确的 IPv4/CIDR 格式');
       return false;
     }
     if (this.config.mode === 'central' && this.config.centralNode.length === 0) {
-      this.message = '中心组网模式必须选择中心节点';
+      this.showToast('中心组网模式必须选择中心节点');
       return false;
     }
     this.loading = true;
@@ -264,10 +335,10 @@ export struct NetworkPage {
           await this.session.api.refreshSdwanNode(member.name, edge);
         }
       }
-      this.message = '网络配置已保存并下发';
+      this.showToast('网络配置已保存并下发');
       return true;
     } catch (error) {
-      this.message = `保存网络失败：${String(error)}`;
+      this.showToast(`保存网络失败：${String(error)}`);
       return false;
     } finally {
       this.loading = false;
@@ -382,16 +453,36 @@ export struct NetworkPage {
         if (this.memberConnections.length > 0) {
           Text('连接状态').width('100%').fontSize(16).fontWeight(FontWeight.Medium)
           ForEach(this.memberConnections, (mapping: PortMapping) => {
-            Row() {
-              Text(mapping.peerNode).layoutWeight(1).fontColor($r('app.color.text_primary'))
-              Text(mapping.isActive === 1 ? '已连接' : (mapping.error ? mapping.error : '连接中'))
-                .fontSize(13).fontColor(mapping.isActive === 1 ? Color.Green : $r('app.color.text_secondary'))
+            Column({ space: 6 }) {
+              Row() {
+                Text(mapping.peerNode).layoutWeight(1).fontColor($r('app.color.text_primary'))
+                Text(this.tunnelStatus(mapping))
+                  .fontSize(13)
+                  .fontColor(mapping.isActive === undefined ? $r('app.color.status_idle') :
+                    (mapping.isActive === 1 ? $r('app.color.accent') :
+                      (mapping.error && mapping.error.length > 0 ? $r('app.color.status_failed') :
+                        $r('app.color.status_connecting'))))
+              }.width('100%')
+              if (mapping.isActive !== 1 && mapping.error && mapping.error.length > 0) {
+                Text(mapping.error).width('100%').fontSize(12).fontColor($r('app.color.status_failed'))
+              }
             }.width('100%').padding(12).backgroundColor($r('app.color.page_background')).borderRadius(12)
           }, (mapping: PortMapping): string => `${mapping.peerNode}-${mapping.appName}`)
         }
         Button('保存成员设置').width('100%').height(48).onClick((): void => { this.saveMember(); })
-      }.width('100%').padding({ left: 20, right: 20, top: 12, bottom: 32 })
-    }.width('100%').height('100%')
+      }
+      .width('100%')
+      .padding({ left: 20, right: 20, top: 12, bottom: 32 })
+      .justifyContent(FlexAlign.Start)
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .height('100%')
+    .align(Alignment.Top)
+    .nestedScroll({
+      scrollForward: NestedScrollMode.SELF_FIRST,
+      scrollBackward: NestedScrollMode.SELF_FIRST
+    })
   }
 
   build() {
@@ -436,17 +527,41 @@ export struct NetworkPage {
           if (this.config.Nodes.length === 0) {
             Text('暂无成员').fontSize(14).fontColor($r('app.color.text_secondary')).padding(18)
           }
-          ForEach(this.config.Nodes, (member: SdwanMember, index: number) => {
-            Row({ space: 10 }) {
-              Column({ space: 3 }) {
-                Text(member.name).fontSize(16).fontWeight(FontWeight.Medium)
-                Text(`${member.ip} · ${member.isActive === 1 ? '在线' : '离线'}`)
-                  .fontSize(13).fontColor($r('app.color.text_secondary'))
-              }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-              Button('编辑').onClick((): void => { this.openMember(member); })
-              Button('移除').fontColor(Color.Red).onClick((): void => { this.removeMember(index); })
-            }.width('100%').padding(12).backgroundColor($r('app.color.page_background')).borderRadius(14)
-          }, (member: SdwanMember): string => `${member.name}-${member.ip}-${member.isActive}-${member.resource}`)
+          if (this.config.Nodes.length > 0) {
+            List({ space: 8 }) {
+              ForEach(this.config.Nodes, (member: SdwanMember, index: number) => {
+                ListItem() {
+                  Row({ space: 10 }) {
+                    Column({ space: 3 }) {
+                      Text(member.name).fontSize(16).fontWeight(FontWeight.Medium)
+                      Text(member.ip).fontSize(13).fontColor($r('app.color.text_secondary'))
+                    }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+                    Text(member.isActive === 1 ? '在线' : '离线')
+                      .fontSize(12)
+                      .fontColor(member.isActive === 1 ? $r('app.color.accent') :
+                        $r('app.color.status_idle'))
+                      .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+                      .backgroundColor(member.isActive === 1 ? $r('app.color.accent_soft') :
+                        $r('app.color.badge_background'))
+                      .borderRadius(12)
+                  }
+                  .width('100%').height(64).padding({ left: 12, right: 12 })
+                  .backgroundColor($r('app.color.page_background')).borderRadius(14)
+                }
+                .swipeAction({
+                  end: {
+                    builder: (): void => { this.memberSwipeActions(member, index); }
+                  },
+                  edgeEffect: SwipeEdgeEffect.None
+                })
+                .onClick((): void => { this.openMember(member); })
+                .bindContextMenu(this.memberContextMenu(member, index), ResponseType.LongPress)
+              }, (member: SdwanMember): string =>
+                `${member.name}-${member.ip}-${member.isActive}-${member.resource}`)
+            }
+            .width('100%').height(this.config.Nodes.length * 72)
+            .scrollBar(BarState.Off).edgeEffect(EdgeEffect.None)
+          }
         }
         .width('100%').padding(18).backgroundColor($r('app.color.card_background')).borderRadius(18)
 

@@ -35,4 +35,15 @@
     <string name="virtual_ip_outside_network">虚拟 IP 必须位于当前网络地址范围内。</string>
     <string name="vpn_permission_required">需要重新授权</string>
     <string name="reauthorize_vpn">重新授权 VPN</string>
+    <string name="tunnel_disabled">已停用</string>
+    <string name="tunnel_failed">连接失败</string>
+    <string name="tunnel_connecting">连接中</string>
+    <string name="tunnel_relay">中继</string>
+    <string name="tunnel_private_relay">中继（私有网络）</string>
+    <string name="tunnel_direct">直连</string>
+    <string name="tunnel_direct_ipv6">IPv6 直连</string>
+    <string name="tunnel_direct_intranet">内网直连</string>
+    <string name="connect_time">连接时间</string>
+    <string name="member_tunnels">成员隧道</string>
+    <string name="unknown_device">未知设备</string>
 </resources>

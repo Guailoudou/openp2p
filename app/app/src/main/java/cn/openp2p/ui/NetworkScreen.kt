@@ -18,6 +18,7 @@ import cn.openp2p.management.SdwanConfig
 import cn.openp2p.management.SdwanMember
 import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 class NetworkScreen(private val activity: MainActivity, private val session: ManagementSession) {
     val view: View
@@ -27,6 +28,17 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
     private var devices: List<Device> = emptyList()
     private var firstLoad = true
     private var errorMessage: String? = null
+
+    private fun tunnelStatus(value: JSONObject): Pair<String, AppStatus> = when {
+        value.has("enabled") && value.optInt("enabled", 1) != 1 -> activity.getString(R.string.tunnel_disabled) to AppStatus.NEUTRAL
+        value.optInt("isActive") != 1 && value.optString("error").isNotBlank() -> activity.getString(R.string.tunnel_failed) to AppStatus.ERROR
+        value.optInt("isActive") != 1 -> activity.getString(R.string.tunnel_connecting) to AppStatus.WARNING
+        value.optString("relayMode") == "public" -> activity.getString(R.string.tunnel_relay) to AppStatus.INFO
+        value.optString("relayMode") == "private" -> activity.getString(R.string.tunnel_private_relay) to AppStatus.INFO
+        value.optString("linkMode") == "ipv6" -> activity.getString(R.string.tunnel_direct_ipv6) to AppStatus.SUCCESS
+        value.optString("linkMode") == "intranet" -> activity.getString(R.string.tunnel_direct_intranet) to AppStatus.SUCCESS
+        else -> activity.getString(R.string.tunnel_direct) to AppStatus.SUCCESS
+    }
 
     init {
         val root = LinearLayout(activity).apply {
@@ -185,8 +197,11 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
             val ip = field(activity.getString(R.string.virtual_ip), member.ip, helper = "IPv4 · 10.0.0.2")
             val resources = field(activity.getString(R.string.resources), member.resource)
             val status = label("", true)
-            secondaryAction(activity.getString(R.string.check_status)) {
+            val tunnels = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+            addView(tunnels)
+            val loadStatus: () -> Unit = {
                 val device = devices.firstOrNull { it.name == member.name }
+                tunnels.removeAllViews()
                 if (device == null || !device.active) {
                     status.text = activity.getString(R.string.device_offline)
                     status.setTextColor(activity.color(R.color.state_warning))
@@ -196,12 +211,40 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                         val error = result.optString("tunError")
                         status.text = if (error.isBlank()) activity.getString(R.string.node_healthy) else error
                         status.setTextColor(activity.color(if (error.isBlank()) R.color.state_success else R.color.state_error))
+                        val apps = result.optJSONArray("Apps")
+                        if (apps != null && apps.length() > 0) {
+                            tunnels.sectionHeader(activity.getString(R.string.member_tunnels), apps.length().toString())
+                            for (index in 0 until apps.length()) {
+                                val tunnel = apps.optJSONObject(index) ?: continue
+                                tunnels.addView(activity.card {
+                                    val header = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                                    header.addView(TextView(activity).apply {
+                                        text = tunnel.optString("peerNode").ifBlank { activity.getString(R.string.unknown_device) }
+                                        textSize = 15f
+                                        setTypeface(typeface, Typeface.BOLD)
+                                        setTextColor(activity.color(R.color.text_primary))
+                                    }, LinearLayout.LayoutParams(0, -2, 1f))
+                                    val state = tunnelStatus(tunnel)
+                                    header.addView(activity.statusChip(state.first, state.second))
+                                    addView(header)
+                                    val connectTime = tunnel.optString("connectTime")
+                                    if (tunnel.optInt("isActive") == 1 && connectTime.isNotBlank()) {
+                                        keyValue(activity.getString(R.string.connect_time), connectTime)
+                                    }
+                                    val tunnelError = tunnel.optString("error")
+                                    if (tunnel.optInt("isActive") != 1 && tunnelError.isNotBlank()) {
+                                        label(tunnelError, true).apply { setTextColor(activity.color(R.color.state_error)) }
+                                    }
+                                }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = activity.dp(8) })
+                            }
+                        }
                     } catch (e: Exception) {
                         status.text = e.message ?: activity.getString(R.string.check_failed)
                         status.setTextColor(activity.color(R.color.state_error))
                     }
                 }
             }
+            secondaryAction(activity.getString(R.string.check_status)) { loadStatus() }
             val save = action(activity.getString(R.string.save_member)) {}
             save.setOnClickListener {
                 val address = ip.text?.toString()?.trim().orEmpty()
@@ -232,6 +275,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                 if (isNew) config.nodes.remove(member)
                 render()
             }
+            loadStatus()
         }
     }
 

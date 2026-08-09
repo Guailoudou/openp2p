@@ -256,6 +256,17 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
         }
     }
 
+    private fun mappingStatus(mapping: PortMapping): Pair<String, AppStatus> = when {
+        !mapping.enabled -> activity.getString(R.string.tunnel_disabled) to AppStatus.NEUTRAL
+        !mapping.active && mapping.error.isNotBlank() -> activity.getString(R.string.tunnel_failed) to AppStatus.ERROR
+        !mapping.active -> activity.getString(R.string.tunnel_connecting) to AppStatus.WARNING
+        mapping.relayMode == "public" -> activity.getString(R.string.tunnel_relay) to AppStatus.INFO
+        mapping.relayMode == "private" -> activity.getString(R.string.tunnel_private_relay) to AppStatus.INFO
+        mapping.linkMode == "ipv6" -> activity.getString(R.string.tunnel_direct_ipv6) to AppStatus.SUCCESS
+        mapping.linkMode == "intranet" -> activity.getString(R.string.tunnel_direct_intranet) to AppStatus.SUCCESS
+        else -> activity.getString(R.string.tunnel_direct) to AppStatus.SUCCESS
+    }
+
     private fun showMappings(device: Device, mappings: List<PortMapping>) {
         activity.bottomSheet("${device.name} · ${activity.getString(R.string.port_mappings)}") { dialog ->
             action(activity.getString(R.string.new_mapping)) { dialog.dismiss(); editMapping(device, null) }
@@ -265,8 +276,13 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
                     val row = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
                     row.addView(TextView(activity).apply { text = mapping.appName.ifBlank { activity.getString(R.string.unnamed_mapping) }; setTextColor(activity.color(R.color.text_primary)); textSize = 16f; setTypeface(typeface, Typeface.BOLD) }, LinearLayout.LayoutParams(0, -2, 1f))
                     row.addView(activity.statusChip(mapping.protocol.uppercase(), AppStatus.INFO))
+                    val tunnelStatus = mappingStatus(mapping)
+                    row.addView(activity.statusChip(tunnelStatus.first, tunnelStatus.second), LinearLayout.LayoutParams(-2, -2).apply { leftMargin = activity.dp(6) })
                     addView(row)
                     label(activity.getString(R.string.mapping_route, mapping.protocol.uppercase(), mapping.srcPort, mapping.peerNode, mapping.dstPort), true).apply { typeface = Typeface.MONOSPACE }
+                    if (mapping.active && mapping.connectTime.isNotBlank()) {
+                        keyValue(activity.getString(R.string.connect_time), mapping.connectTime)
+                    }
                     if (mapping.error.isNotBlank()) label(mapping.error, true).apply { setTextColor(activity.color(R.color.state_error)) }
                     val switch = SwitchMaterial(activity).apply {
                         text = activity.getString(if (mapping.enabled) R.string.enabled else R.string.disabled)
