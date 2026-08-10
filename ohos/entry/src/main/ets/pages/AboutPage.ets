@@ -33,22 +33,32 @@ export struct AboutPage {
     .padding({ top: 16, bottom: 16, left: 18, right: 18 })
   }
 
+  @Builder
+  private openSourceRow() {
+    Row({ space: 14 }) {
+      SymbolGlyph($r('sys.symbol.link'))
+        .fontSize(18)
+        .fontColor([$r('app.color.accent')])
+      Text('软件开源')
+        .fontSize(15)
+        .fontColor($r('app.color.text_secondary'))
+        .layoutWeight(1)
+      Hyperlink('https://github.com/openp2p-cn/openp2p', 'OpenP2P')
+        .color($r('app.color.accent'))
+    }
+    .width('100%')
+    .padding({ top: 16, bottom: 16, left: 18, right: 18 })
+  }
+
   build() {
     Scroll() {
       Column({ space: 18 }) {
         Column({ space: 12 }) {
-          Stack() {
-            Circle()
-              .width(80)
-              .height(80)
-              .fill($r('app.color.accent_soft'))
-            Text('O')
-              .fontSize(36)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.accent'))
-          }
-          .width(80)
-          .height(80)
+          Image($r('app.media.openp2p1024'))
+            .width(80)
+            .height(80)
+            .objectFit(ImageFit.Cover)
+            .borderRadius(20)
 
           Text('OpenP2P')
             .fontSize(24)
@@ -72,6 +82,8 @@ export struct AboutPage {
           this.infoRow($r('sys.symbol.gearshape_fill'), '核心架构', 'arm64-v8a')
           Divider().color($r('app.color.divider')).padding({ left: 18, right: 18 })
           this.infoRow($r('sys.symbol.hammer_fill'), '核心类型', 'OpenP2P Go Native')
+          Divider().color($r('app.color.divider')).padding({ left: 18, right: 18 })
+          this.openSourceRow()
         }
         .width('100%')
         .backgroundColor($r('app.color.card_background'))

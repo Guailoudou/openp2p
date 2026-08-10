@@ -11,6 +11,8 @@ export struct ProfilePage {
   @State private passwordInput: string = '';
   @State private accountMessage: string = '';
   @State private savingAccount: boolean = false;
+  @State private managementEmailRevealed: boolean = false;
+  @State private managementPhoneRevealed: boolean = false;
   @State private savingBackgroundSetting: boolean = false;
   @State private localBackgroundKeepAliveEnabled: boolean = true;
   @State private localSimulatedLocationEnabled: boolean = false;
@@ -207,8 +209,8 @@ export struct ProfilePage {
     Column({ space: 18 }) {
       if (this.managementAuthenticated) {
         this.profileItem('账号', this.managementUsername)
-        this.profileItem('邮箱', this.managementEmail.length > 0 ? this.managementEmail : '未填写')
-        this.profileItem('手机', this.managementPhone.length > 0 ? this.managementPhone : '未填写')
+        this.managementEmailItem()
+        this.managementPhoneItem()
         this.profileItem('注册时间', this.managementAddTime.length > 0 ? this.managementAddTime : '未知')
         Row({ space: 8 }) {
           SymbolGlyph($r('sys.symbol.lock_fill')).fontSize(16).fontColor([$r('app.color.accent')])
@@ -275,6 +277,90 @@ export struct ProfilePage {
       Text(value).fontSize(15).fontColor($r('app.color.text_primary')).textAlign(TextAlign.End)
     }
     .width('100%').padding(14).backgroundColor($r('app.color.page_background')).borderRadius(12)
+  }
+
+  @Builder
+  private managementEmailItem() {
+    Row() {
+      Text('邮箱').fontSize(14).fontColor($r('app.color.text_secondary'))
+      Blank()
+      Text(this.managementEmailRevealed ? this.fullManagementEmail() : this.maskedManagementEmail())
+        .fontSize(15)
+        .fontColor($r('app.color.text_primary'))
+        .textAlign(TextAlign.End)
+    }
+    .width('100%').padding(14).backgroundColor($r('app.color.page_background')).borderRadius(12)
+    .onClick((): void => {
+      if (this.managementEmail.trim().length > 0) {
+        this.managementEmailRevealed = true;
+      }
+    })
+  }
+
+  @Builder
+  private managementPhoneItem() {
+    Row() {
+      Text('手机').fontSize(14).fontColor($r('app.color.text_secondary'))
+      Blank()
+      Text(this.managementPhoneRevealed ? this.fullManagementPhone() : this.maskedManagementPhone())
+        .fontSize(15)
+        .fontColor($r('app.color.text_primary'))
+        .textAlign(TextAlign.End)
+    }
+    .width('100%').padding(14).backgroundColor($r('app.color.page_background')).borderRadius(12)
+    .onClick((): void => {
+      if (this.managementPhone.trim().length > 0) {
+        this.managementPhoneRevealed = true;
+      }
+    })
+  }
+
+  private fullManagementEmail(): string {
+    const email = this.managementEmail.trim();
+    return email.length > 0 ? email : '未填写';
+  }
+
+  private maskedManagementEmail(): string {
+    const email = this.managementEmail.trim();
+    if (email.length === 0) {
+      return '未填写';
+    }
+    const atIndex = email.indexOf('@');
+    if (atIndex < 0) {
+      return this.maskContactValue(email);
+    }
+    const localPart = email.substring(0, atIndex);
+    const domainPart = email.substring(atIndex);
+    if (localPart.length <= 1) {
+      return `***${domainPart}`;
+    }
+    if (localPart.length === 2) {
+      return `${localPart.substring(0, 1)}***${domainPart}`;
+    }
+    return `${localPart.substring(0, 1)}***${localPart.substring(localPart.length - 1)}${domainPart}`;
+  }
+
+  private fullManagementPhone(): string {
+    const phone = this.managementPhone.trim();
+    return phone.length > 0 ? phone : '未填写';
+  }
+
+  private maskedManagementPhone(): string {
+    const phone = this.managementPhone.trim();
+    if (phone.length === 0) {
+      return '未填写';
+    }
+    return this.maskContactValue(phone);
+  }
+
+  private maskContactValue(value: string): string {
+    if (value.length <= 4) {
+      return '****';
+    }
+    if (value.length <= 7) {
+      return `${value.substring(0, 2)}***${value.substring(value.length - 2)}`;
+    }
+    return `${value.substring(0, 3)}****${value.substring(value.length - 4)}`;
   }
 
   private async saveManagementAccount(): Promise<void> {
@@ -362,6 +448,8 @@ export struct ProfilePage {
             this.accountInput = this.managementUsername;
             this.passwordInput = '';
             this.accountMessage = '';
+            this.managementEmailRevealed = false;
+            this.managementPhoneRevealed = false;
             this.showManagementAccount = true;
           })
           .bindSheet($$this.showManagementAccount, this.managementAccountSheet(), {
