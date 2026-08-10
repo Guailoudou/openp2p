@@ -1,4 +1,11 @@
-import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
+import {
+  abilityAccessCtrl,
+  AbilityConstant,
+  ConfigurationConstant,
+  Permissions,
+  UIAbility,
+  Want
+} from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { CoreService } from '../service/CoreService';
@@ -33,6 +40,7 @@ export default class EntryAbility extends UIAbility {
         .catch((error: Object): void => {
           hilog.warn(DOMAIN, 'testTag', 'PiP initialization unavailable: %{public}s', JSON.stringify(error));
         });
+      this.ensureDeviceNamePermission();
       hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
     });
   }
@@ -53,5 +61,19 @@ export default class EntryAbility extends UIAbility {
     this.coreService?.onAppBackground().catch((error: Object) => {
       hilog.warn(DOMAIN, 'testTag', 'Unable to start PiP on background: %{public}s', JSON.stringify(error));
     });
+  }
+
+  private async ensureDeviceNamePermission(): Promise<void> {
+    try {
+      const permission: Permissions = 'ohos.permission.DISTRIBUTED_DATASYNC';
+      const manager = abilityAccessCtrl.createAtManager();
+      if (manager.checkAccessTokenSync(this.context.applicationInfo.accessTokenId, permission) ===
+        abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED) {
+        return;
+      }
+      await manager.requestPermissionsFromUser(this.context, [permission]);
+    } catch (error) {
+      hilog.warn(DOMAIN, 'testTag', 'Device name permission unavailable: %{public}s', JSON.stringify(error));
+    }
   }
 }

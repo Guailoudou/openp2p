@@ -15,6 +15,10 @@
     {
       "name": "permission_reason_location",
       "value": "用于可选的低功耗后台定位保活功能"
+    },
+    {
+      "name": "permission_reason_device_name",
+      "value": "用于读取本机设置的设备名称并生成默认节点名称"
     }
   ]
 }

@@ -3,6 +3,7 @@ import vpnExtension from '@ohos.net.vpnExtension';
 import { Want } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { deviceInfo, settings } from '@kit.BasicServicesKit';
+import { distributedDeviceManager } from '@kit.DistributedServiceKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import coreNative from 'libentry.so';
 import { RuntimeStateStore } from '../service/RuntimeStateStore';
@@ -716,20 +717,58 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
   }
 
   private deviceNodeCandidate(): string {
+    const marketName = deviceInfo.marketName.trim();
+    const productModel = deviceInfo.productModel.trim();
+    let settingsName = '';
     try {
-      const deviceName = settings.getValueSync(this.context, settings.general.DEVICE_NAME, '').trim();
-      if (deviceName.length > 0 && deviceName !== 'default') {
-        return deviceName;
+      settingsName = settings.getValueSync(this.context, settings.general.DEVICE_NAME, '').trim();
+      if (this.isUsableDeviceName(settingsName) && !this.isModelName(settingsName, marketName, productModel)) {
+        return settingsName;
       }
     } catch (error) {
       hilog.warn(DOMAIN, TAG, 'Unable to read local device name: %{public}s', this.formatError(error));
     }
-    const marketName = deviceInfo.marketName.trim();
-    if (marketName.length > 0 && marketName !== 'default') {
+
+    const distributedName = this.readDistributedDeviceName();
+    if (this.isUsableDeviceName(distributedName)) {
+      return distributedName;
+    }
+    if (this.isUsableDeviceName(settingsName)) {
+      return settingsName;
+    }
+    if (this.isUsableDeviceName(marketName)) {
       return marketName;
     }
-    const productModel = deviceInfo.productModel.trim();
-    return productModel.length > 0 && productModel !== 'default' ? productModel : 'HarmonyOS-device';
+    return this.isUsableDeviceName(productModel) ? productModel : 'HarmonyOS-device';
+  }
+
+  private readDistributedDeviceName(): string {
+    let manager: distributedDeviceManager.DeviceManager | undefined;
+    try {
+      manager = distributedDeviceManager.createDeviceManager(this.context.applicationInfo.name);
+      return manager.getLocalDeviceName().trim();
+    } catch (error) {
+      hilog.warn(DOMAIN, TAG, 'Unable to read distributed local device name: %{public}s', this.formatError(error));
+      return '';
+    } finally {
+      if (manager !== undefined) {
+        try {
+          distributedDeviceManager.releaseDeviceManager(manager);
+        } catch (error) {
+          hilog.warn(DOMAIN, TAG, 'Unable to release device manager: %{public}s', this.formatError(error));
+        }
+      }
+    }
+  }
+
+  private isUsableDeviceName(value: string): boolean {
+    return value.length > 0 && value.toLowerCase() !== 'default';
+  }
+
+  private isModelName(value: string, marketName: string, productModel: string): boolean {
+    const normalized = value.toLocaleLowerCase();
+    return (marketName.length > 0 && normalized === marketName.toLocaleLowerCase()) ||
+      (productModel.length > 0 && normalized === productModel.toLocaleLowerCase());
   }
 
   private exhaustRecovery(): void {

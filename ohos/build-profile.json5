@@ -7,11 +7,24 @@
         "material": {
           "certpath": "C:\\Users\\Guail\\.ohos\\config\\default_ohos_51j2pCnGHISXkbrgNb2u5ojCMOd3-q5dAzQN_dd-NT4=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001B0F20F0B62CC9DA54D1CEA80095E3416D21C2AADDFE8E5E7C779DD01F28A17C8DDF45E585B6FA0E",
+          "keyPassword": "0000001A99C4F34B8048069A0EF6EDBF972D40C9125FFF12D7925D72811B137E2F48559F8C1A85C0C76D",
           "profile": "C:\\Users\\Guail\\.ohos\\config\\default_ohos_51j2pCnGHISXkbrgNb2u5ojCMOd3-q5dAzQN_dd-NT4=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "C:\\Users\\Guail\\.ohos\\config\\default_ohos_51j2pCnGHISXkbrgNb2u5ojCMOd3-q5dAzQN_dd-NT4=.p12",
-          "storePassword": "0000001B7AF40FB3FBCDD9A066FD056DBA6DA2DB9D32A1CF5217B8ACC63319771A172B488ABBBC63E8479F"
+          "storePassword": "0000001AFEDD25DEB0A8DC9C860124A094B3B8658CEA412D94245F55ED4BC08C14A73242E965230C6236"
+        }
+      },
+      {
+        "name": "fabu",
+        "type": "HarmonyOS",
+        "material": {
+          "storeFile": "D:/Guail/Documents/huawei_sign/OpenP2P.p12",
+          "storePassword": "0000001A8E78B25721E2C67CCEF02BF66BC45171D6281B0DFBD5128E25358533D91B18C8605EB49D1D91",
+          "keyAlias": "openp2p",
+          "keyPassword": "0000001ADF8454988243ADDE2A65774834F71E47943A78C1D603D4D57BA5FAAC1F680EF5791E5AD80D4E",
+          "signAlg": "SHA256withECDSA",
+          "profile": "D:/Guail/Documents/huawei_sign/openp2p_beta1Release.p7b",
+          "certpath": "D:/Guail/Documents/huawei_sign/openp2p.cer"
         }
       }
     ],
