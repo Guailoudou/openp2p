@@ -3,6 +3,8 @@ package cn.openp2p.ui
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.Menu
 import android.view.View
@@ -21,6 +23,7 @@ import cn.openp2p.management.ManagementSession
 import cn.openp2p.management.SdwanConfig
 import cn.openp2p.management.SdwanMember
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -32,8 +35,10 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
     private var devices: List<Device> = emptyList()
     private var firstLoad = true
     private var errorMessage: String? = null
+    private val memberIpViews = mutableMapOf<String, TextView>()
 
     private fun tunnelStatus(value: JSONObject): Pair<String, AppStatus> = when {
+        !value.has("isActive") -> activity.getString(R.string.tunnel_offline) to AppStatus.NEUTRAL
         value.has("enabled") && value.optInt("enabled", 1) != 1 -> activity.getString(R.string.tunnel_disabled) to AppStatus.NEUTRAL
         value.optInt("isActive") != 1 && value.optString("error").isNotBlank() -> activity.getString(R.string.tunnel_failed) to AppStatus.ERROR
         value.optInt("isActive") != 1 -> activity.getString(R.string.tunnel_connecting) to AppStatus.WARNING
@@ -54,7 +59,13 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
             textSize = 28f
             setTextColor(activity.color(R.color.text_primary))
             setTypeface(typeface, Typeface.BOLD)
-            setPadding(activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), activity.dp(20), activity.dp(16), activity.dp(12))
+            setPadding(activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), activity.dp(20), activity.dp(16), 0)
+        })
+        root.addView(TextView(activity).apply {
+            text = activity.getString(R.string.network_subtitle)
+            textSize = 14f
+            setTextColor(activity.color(R.color.text_secondary))
+            setPadding(activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), activity.dp(4), activity.dp(16), activity.dp(12))
         })
         body.orientation = LinearLayout.VERTICAL
         body.setPadding(activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), 0, activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), activity.dp(32))
@@ -86,43 +97,125 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
 
     private fun render() {
         body.removeAllViews()
+        memberIpViews.clear()
         if (firstLoad) { body.loadingState(); return }
         errorMessage?.let { body.errorState(it) { load() }; return }
-        body.sectionHeader(activity.getString(R.string.network_overview))
+        var gatewayInput: TextInputEditText? = null
         body.addView(activity.card {
-            keyValue(activity.getString(R.string.network_address), config.gateway.ifBlank { "--" }, true)
-            keyValue(activity.getString(R.string.network_mode), activity.getString(if (config.mode == "central") R.string.network_mode_central else R.string.network_mode_fullmesh))
-            keyValue(activity.getString(R.string.member_count), config.nodes.size.toString())
-            keyValue(activity.getString(R.string.network_health), activity.getString(R.string.network_ready))
-            action(activity.getString(R.string.edit_network_config)) { editNetworkConfig() }
-        })
-
-        body.sectionHeader(activity.getString(R.string.network_members), config.nodes.size.toString())
-        if (config.nodes.isEmpty()) body.emptyState(activity.getString(R.string.network_members), activity.getString(R.string.no_members))
-        config.nodes.forEach { member ->
-            val device = devices.firstOrNull { it.name == member.name }
-            val card = activity.card {
-                val header = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-                header.addView(TextView(activity).apply {
-                    text = member.name; textSize = 16f; setTypeface(typeface, Typeface.BOLD); setTextColor(activity.color(R.color.text_primary))
-                }, LinearLayout.LayoutParams(0, -2, 1f))
-                header.addView(activity.statusChip(activity.getString(if (device?.active == true) R.string.online else R.string.offline), if (device?.active == true) AppStatus.SUCCESS else AppStatus.NEUTRAL))
-                addView(header)
-                label(member.ip, true).apply { typeface = Typeface.MONOSPACE }
-                if (member.resource.isNotBlank()) label(member.resource, true)
-                minimumHeight = activity.dp(72)
-                setOnClickListener { editMember(member) }
-                setOnLongClickListener { anchor -> showMemberMenu(anchor, member); true }
+            label(activity.getString(R.string.network_settings)).apply {
+                textSize = 18f
+                setTypeface(typeface, Typeface.BOLD)
             }
-            body.addView(activity.swipeActions(card, memberSwipeActions(member)) { swiping ->
-                swipe.isEnabled = !swiping
-            },
-                LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(12) })
+            gatewayInput = field(activity.getString(R.string.network_address), config.gateway)
+            gatewayInput?.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                override fun afterTextChanged(s: Editable?) {
+                    updateMemberGateway(config, s?.toString()?.trim().orEmpty())
+                }
+            })
+
+            val modeRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+            fun modeButton(text: String, value: String): MaterialButton = MaterialButton(activity).apply {
+                this.text = text
+                minHeight = activity.dp(48)
+                cornerRadius = activity.dp(12)
+                val selected = config.mode == value
+                setTextColor(activity.color(if (selected) R.color.brand_on_primary else R.color.text_primary))
+                backgroundTintList = ColorStateList.valueOf(activity.color(if (selected) R.color.brand_primary else R.color.surface_subtle))
+                setOnClickListener {
+                    if (config.mode != value) {
+                        config.mode = value
+                        render()
+                    }
+                }
+            }
+            modeRow.addView(modeButton(activity.getString(R.string.network_mode_fullmesh), "fullmesh"),
+                LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = activity.dp(4) })
+            modeRow.addView(modeButton(activity.getString(R.string.network_mode_central), "central"),
+                LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = activity.dp(4) })
+            addView(modeRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(12) })
+
+            val nodeLabel = activity.getString(if (config.mode == "central") R.string.central_node else R.string.specified_relay_node)
+            secondaryAction("$nodeLabel · ${config.centralNode.ifBlank { activity.getString(R.string.not_specified) }}") {
+                val options = listOf<String?>(null) + config.nodes.map { it.name }.distinct()
+                activity.wheelPicker(nodeLabel, options.map { it ?: activity.getString(R.string.not_specified) },
+                    options.indexOf(config.centralNode.ifBlank { null }).coerceAtLeast(0)) { index ->
+                    config.centralNode = options[index].orEmpty()
+                    render()
+                }
+            }
+            if (config.mode != "central") {
+                addView(Switch(activity).apply {
+                    text = activity.getString(R.string.force_relay)
+                    textSize = 16f
+                    isChecked = config.forceRelay == 1
+                    minHeight = activity.dp(48)
+                    setOnCheckedChangeListener { _, checked -> config.forceRelay = if (checked) 1 else 0 }
+                })
+            }
+            val priorities = activity.punchPriorityOptions()
+            val selectedPriority = config.punchPriority.coerceIn(0, priorities.lastIndex)
+            secondaryAction("${activity.getString(R.string.punch_priority)} · ${priorities[selectedPriority]}") {
+                activity.wheelPicker(activity.getString(R.string.punch_priority), priorities, selectedPriority) { index ->
+                    config.punchPriority = index
+                    render()
+                }
+            }
+        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(16) })
+
+        body.addView(activity.card {
+            label(activity.getString(R.string.network_members)).apply {
+                textSize = 18f
+                setTypeface(typeface, Typeface.BOLD)
+            }
+            if (config.nodes.isEmpty()) {
+                label(activity.getString(R.string.no_members), true).apply {
+                    setPadding(0, activity.dp(12), 0, activity.dp(12))
+                }
+            }
+            config.nodes.forEach { member ->
+                val device = devices.firstOrNull { it.name == member.name }
+                val memberCard = activity.card {
+                    val header = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                    header.addView(TextView(activity).apply {
+                        text = member.name; textSize = 16f; setTypeface(typeface, Typeface.BOLD); setTextColor(activity.color(R.color.text_primary))
+                    }, LinearLayout.LayoutParams(0, -2, 1f))
+                    header.addView(activity.statusChip(activity.getString(if (device?.active == true) R.string.online else R.string.offline), if (device?.active == true) AppStatus.SUCCESS else AppStatus.NEUTRAL))
+                    addView(header)
+                    label(member.ip, true).apply {
+                        typeface = Typeface.MONOSPACE
+                        memberIpViews[member.name] = this
+                    }
+                    if (member.resource.isNotBlank()) label(member.resource, true)
+                    minimumHeight = activity.dp(72)
+                    setOnClickListener { editMember(member) }
+                    setOnLongClickListener { anchor -> showMemberMenu(anchor, member); true }
+                }
+                addView(activity.swipeActions(memberCard, memberSwipeActions(member)) { swiping ->
+                    swipe.isEnabled = !swiping
+                }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(8) })
+            }
+        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(16) })
+
+        val available = availableDevices()
+        if (available.isNotEmpty()) {
+            body.addView(activity.card {
+                label(activity.getString(R.string.available_devices)).apply {
+                    textSize = 18f
+                    setTypeface(typeface, Typeface.BOLD)
+                }
+                label(activity.resources.getQuantityString(R.plurals.available_device_count, available.size, available.size), true)
+                action(activity.getString(R.string.select_device)) { chooseAvailableDevice() }
+            }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(16) })
         }
-        body.secondaryAction(activity.getString(R.string.add_device)) { chooseAvailableDevice() }
         val save = body.action(activity.getString(R.string.save_network_config)) {}
         save.setOnClickListener {
-            persistConfig(config.snapshot(), save) { load() }
+            when {
+                !isCidr(config.gateway) -> gatewayInput?.showError(activity.getString(R.string.network_address_invalid))
+                config.mode == "central" && config.centralNode.isBlank() -> view.snack(activity.getString(R.string.central_node_required))
+                else -> persistConfig(config.snapshot(), save) { load() }
+            }
         }
     }
 
@@ -233,8 +326,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
     }
 
     private fun chooseAvailableDevice() {
-        val existing = config.nodes.map { it.name }.toSet()
-        val options = devices.filter { eligible(it) && it.name !in existing }
+        val options = availableDevices()
         if (options.isEmpty()) { view.snack(activity.getString(R.string.no_eligible_device)); return }
         activity.wheelPicker(activity.getString(R.string.add_device), options.map { it.remark.ifBlank { it.name } }) { index ->
             val device = options[index]
@@ -266,7 +358,8 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                     try {
                         val result = session.api.memberStatus(device)
                         val error = result.optString("tunError")
-                        status.text = if (error.isBlank()) activity.getString(R.string.node_healthy) else error
+                        status.text = if (error.isBlank()) activity.getString(R.string.node_healthy)
+                        else activity.getString(R.string.tun_error, error)
                         status.setTextColor(activity.color(if (error.isBlank()) R.color.state_success else R.color.state_error))
                         val apps = result.optJSONArray("Apps")
                         if (apps != null && apps.length() > 0) {
@@ -352,7 +445,9 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
         activity.lifecycleScope.launch {
             try {
                 session.api.saveSdwan(value)
-                value.nodes.mapNotNull { member -> devices.firstOrNull { it.name == member.name && it.active } }
+                value.nodes.mapNotNull { member ->
+                    devices.firstOrNull { it.name == member.name && it.active && it.edgeServer.isNotBlank() }
+                }
                     .forEach { session.api.refreshSdwanNode(it) }
                 view.toast(activity.getString(R.string.network_saved))
                 complete()
@@ -366,6 +461,11 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
     }
 
     private fun eligible(device: Device): Boolean = device.active && compareVersion(device.version, "3.13") >= 0
+
+    private fun availableDevices(): List<Device> {
+        val existing = config.nodes.map { it.name }.toSet()
+        return devices.filter { eligible(it) && it.name !in existing }
+    }
 
     private fun compareVersion(left: String, right: String): Int {
         val a = Regex("\\d+").findAll(left).map { it.value.toIntOrNull() ?: 0 }.toList()
@@ -389,7 +489,10 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
         if (base.size == 4) {
             val prefix = "${base[0]}.${base[1]}.${base[2]}"
             value.nodes.forEach { member ->
-                member.ip.substringAfterLast('.', "").takeIf { it.isNotBlank() }?.let { member.ip = "$prefix.$it" }
+                member.ip.substringAfterLast('.', "").takeIf { it.isNotBlank() }?.let {
+                    member.ip = "$prefix.$it"
+                    memberIpViews[member.name]?.text = member.ip
+                }
             }
         }
         value.gateway = gateway

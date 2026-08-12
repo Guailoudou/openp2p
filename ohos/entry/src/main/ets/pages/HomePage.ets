@@ -6,15 +6,136 @@ import { CoreUiState } from '../model/CoreUiState';
 @Component
 export struct HomePage {
   @ObjectLink state: CoreUiState;
+  @Prop managementAuthenticated: boolean = false;
+  @Prop managementUsername: string = '';
+  @State private showManagementAccount: boolean = false;
+  @State private accountInput: string = '';
+  @State private passwordInput: string = '';
+  @State private accountMessage: string = '';
+  @State private savingAccount: boolean = false;
   onToggleCore: () => void = (): void => {};
   onSaveToken: () => void = (): void => {};
+  onSaveManagementCredentials: (username: string, password: string) => Promise<boolean> =
+    async (_username: string, _password: string): Promise<boolean> => false;
+
+  private tokenSource(): string {
+    if (this.managementAuthenticated) {
+      return '管理账号';
+    }
+    return this.state.token.trim().length > 0 ? '本地配置' : '未配置';
+  }
+
+  private virtualNetworkStatus(): string {
+    switch (this.state.coreState) {
+      case 'vpn_ready':
+        return '已就绪';
+      case 'vpn_requested':
+      case 'vpn_starting':
+        return '正在创建';
+      case 'vpn_waiting_config':
+        return '等待云端配置';
+      case 'failed':
+      case 'recovery_exhausted':
+        return '连接异常';
+      default:
+        return this.state.running ? '等待云端配置' : '未启动';
+    }
+  }
+
+  @Builder
+  private overviewItem(label: string, value: string) {
+    Row() {
+      Text(label).fontSize(14).fontColor($r('app.color.text_secondary'))
+      Blank()
+      Text(value).fontSize(14).fontColor($r('app.color.text_primary'))
+        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+    }.width('100%').padding({ top: 8, bottom: 8 })
+  }
+
+  @Builder
+  private configurationOverview() {
+    Column({ space: 2 }) {
+      Text('配置概览').width('100%').fontSize(18).fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_primary')).margin({ bottom: 6 })
+      this.overviewItem('Token 来源', this.tokenSource())
+      Divider().color($r('app.color.divider'))
+      this.overviewItem('VPN 授权', '启动时请求')
+      Divider().color($r('app.color.divider'))
+      this.overviewItem('虚拟网络', this.virtualNetworkStatus())
+      Divider().color($r('app.color.divider'))
+      this.overviewItem('管理账号', this.managementAuthenticated ? '已登录' : '未登录')
+    }
+    .width('100%').padding(20).backgroundColor($r('app.color.card_background')).borderRadius(20)
+    .shadow({ radius: 20, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 8 })
+  }
+
+  @Builder
+  private managementAccountSheet() {
+    Column({ space: 18 }) {
+      TextInput({ text: this.accountInput, placeholder: '请输入管理账号' })
+        .height(52).fontSize(16).backgroundColor($r('app.color.page_background')).borderRadius(14)
+        .onChange((value: string): void => { this.accountInput = value; this.accountMessage = ''; })
+      TextInput({ text: this.passwordInput, placeholder: '请输入管理密码' })
+        .type(InputType.Password).height(52).fontSize(16)
+        .backgroundColor($r('app.color.page_background')).borderRadius(14)
+        .onChange((value: string): void => { this.passwordInput = value; this.accountMessage = ''; })
+      if (this.accountMessage.length > 0) {
+        Text(this.accountMessage).width('100%').fontSize(14).fontColor($r('app.color.status_failed'))
+      }
+      Button(this.savingAccount ? '正在登录…' : '保存并登录')
+        .width('100%').height(48).enabled(!this.savingAccount)
+        .onClick((): void => { this.saveManagementAccount(); })
+    }
+    .width('100%').height('100%').padding({ left: 20, right: 20, top: 16, bottom: 32 })
+  }
+
+  private async saveManagementAccount(): Promise<void> {
+    const username = this.accountInput.trim();
+    if (username.length === 0) {
+      this.accountMessage = '请输入管理账号';
+      return;
+    }
+    if (this.passwordInput.length === 0) {
+      this.accountMessage = '请输入管理密码';
+      return;
+    }
+    this.savingAccount = true;
+    try {
+      if (await this.onSaveManagementCredentials(username, this.passwordInput)) {
+        this.passwordInput = '';
+        this.accountMessage = '';
+        this.showManagementAccount = false;
+        this.getUIContext().getPromptAction().showToast({ message: '登录成功' });
+      } else {
+        this.accountMessage = '登录失败，请检查账号密码或网络';
+      }
+    } catch (error) {
+      const value = error as Record<string, Object>;
+      const message = value['message'];
+      this.accountMessage = typeof message === 'string' && message.length > 0 ? message : '登录失败';
+    } finally {
+      this.savingAccount = false;
+    }
+  }
 
   build() {
     Scroll() {
       Column({ space: 18 }) {
         PageHeader({ title: 'OpenP2P', subtitle: '安全、轻量的点对点连接' })
         StatusCard({ state: this.state })
-        TokenCard({ state: this.state, onSave: this.onSaveToken })
+        this.configurationOverview()
+        if (!this.managementAuthenticated) {
+          TokenCard({ state: this.state, onSave: this.onSaveToken })
+          Button('登录管理账号')
+            .width('100%').height(48).fontColor($r('app.color.accent'))
+            .backgroundColor($r('app.color.accent_soft')).borderRadius(14)
+            .onClick((): void => {
+              this.accountInput = this.managementUsername;
+              this.passwordInput = '';
+              this.accountMessage = '';
+              this.showManagementAccount = true;
+            })
+        }
 
         Column() {
           Button() {
@@ -58,5 +179,11 @@ export struct HomePage {
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
+    .bindSheet($$this.showManagementAccount, this.managementAccountSheet(), {
+      height: SheetSize.MEDIUM,
+      dragBar: true,
+      preferType: SheetType.BOTTOM,
+      title: { title: '管理账号' }
+    })
   }
 }

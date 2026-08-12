@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">OpenP2P Private and Public Network</title>
+  <desc id="desc">Two blue network clouds exchange traffic over a green peer-to-peer route.</desc>
+  <defs>
+    <linearGradient id="tile" x1="64" y1="64" x2="448" y2="448" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22272A"/>
+      <stop offset="1" stop-color="#121516"/>
+    </linearGradient>
+    <linearGradient id="publicCloud" x1="139" y1="82" x2="379" y2="216" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0F9FF"/>
+      <stop offset=".55" stop-color="#83C9F5"/>
+      <stop offset="1" stop-color="#4387B8"/>
+    </linearGradient>
+    <linearGradient id="privateCloud" x1="94" y1="260" x2="418" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B7E3FC"/>
+      <stop offset=".54" stop-color="#63AFE0"/>
+      <stop offset="1" stop-color="#326C94"/>
+    </linearGradient>
+    <linearGradient id="routeDown" x1="244" y1="204" x2="244" y2="290" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A7E54A"/>
+      <stop offset="1" stop-color="#00C86B"/>
+    </linearGradient>
+    <linearGradient id="routeUp" x1="268" y1="290" x2="268" y2="204" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00C86B"/>
+      <stop offset="1" stop-color="#8BD33F"/>
+    </linearGradient>
+    <clipPath id="tileClip">
+      <rect x="48" y="48" width="416" height="416" rx="112"/>
+    </clipPath>
+  </defs>
+
+  <rect x="48" y="48" width="416" height="416" rx="112" fill="url(#tile)"/>
+  <g clip-path="url(#tileClip)">
+    <circle cx="126" cy="104" r="92" fill="#68BDF4" opacity=".055"/>
+    <circle cx="420" cy="416" r="126" fill="#00C86B" opacity=".045"/>
+  </g>
+
+  <path d="M185 216c-31 0-55-23-55-52 0-30 25-54 57-54 6 0 12 1 18 3 14-28 42-46 74-46 36 0 66 23 76 55 25 3 43 23 43 48 0 26-22 46-50 46Z" fill="url(#publicCloud)"/>
+  <path d="M151 420c-35 0-61-25-61-58 0-35 29-63 66-63 7 0 14 1 21 3 16-34 49-56 88-56 44 0 81 29 92 68 34 3 61 29 61 61 0 26-22 45-54 45Z" fill="url(#privateCloud)"/>
+
+  <path d="M244 203v85" fill="none" stroke="url(#routeDown)" stroke-width="12" stroke-linecap="round"/>
+  <path d="M268 289v-85" fill="none" stroke="url(#routeUp)" stroke-width="12" stroke-linecap="round"/>
+  <path d="m233 277 11 12 11-12" fill="none" stroke="#B5ED59" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m257 216 11-12 11 12" fill="none" stroke="#55DB8D" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <circle cx="244" cy="203" r="7" fill="#F5FAFE"/>
+  <circle cx="244" cy="289" r="7" fill="#F5FAFE"/>
+  <circle cx="268" cy="204" r="7" fill="#F5FAFE"/>
+  <circle cx="268" cy="289" r="7" fill="#F5FAFE"/>
+</svg>

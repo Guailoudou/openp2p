@@ -1,7 +1,7 @@
 {
   "app": {
     "bundleName": "top.gldhn.openp2p_ohos",
-    "vendor": "example",
+    "vendor": "OpenP2P",
     "versionCode": 3251101,
     "versionName": "3.25.11.1",
     "icon": "$media:layered_image",

@@ -3,6 +3,7 @@
     <string name="nav_home">Home</string>
     <string name="nav_devices">Devices</string>
     <string name="nav_network">Network</string>
+    <string name="network_subtitle">Manage the SD-WAN gateway, mode, and members</string>
     <string name="nav_logs">Logs</string>
     <string name="nav_profile">Profile</string>
     <string name="status_running">Running</string>
@@ -130,7 +131,8 @@
     <string name="new_mapping_default_name">New mapping</string>
     <string name="mapping_saved">Mapping saved</string>
     <string name="network_overview">Network overview</string>
-    <string name="network_address">Network address</string>
+    <string name="network_settings">Network settings</string>
+    <string name="network_address">Gateway</string>
     <string name="network_mode">Mode</string>
     <string name="network_mode_fullmesh">P2P mode</string>
     <string name="network_mode_central">Central mode</string>
@@ -142,13 +144,19 @@
     <string name="specified_relay_node">Specified relay node</string>
     <string name="force_relay">Force relay</string>
     <string name="save_network_config">Save network configuration</string>
-    <string name="network_address_required">Enter a network address.</string>
-    <string name="network_address_invalid">Use an IPv4 CIDR address, for example 10.0.0.0/24.</string>
+    <string name="network_address_required">Enter a gateway.</string>
+    <string name="network_address_invalid">Use an IPv4 CIDR gateway, for example 10.0.0.0/24.</string>
     <string name="central_node_required">Select a central node.</string>
-    <string name="network_saved">Network configuration saved</string>
+    <string name="network_saved">Network configuration saved and dispatched</string>
     <string name="network_members">Network members</string>
     <string name="no_members">No devices have joined this network.</string>
     <string name="add_device">Add device</string>
+    <string name="available_devices">Available devices</string>
+    <plurals name="available_device_count">
+        <item quantity="one">%d device can join</item>
+        <item quantity="other">%d devices can join</item>
+    </plurals>
+    <string name="select_device">Select device</string>
     <string name="no_eligible_device">No eligible device. A device must be online, version 3.13 or later, and not already a member.</string>
     <string name="no_available_virtual_ip">No virtual IP is available in the current network.</string>
     <string name="network_member">Network member</string>
@@ -212,6 +220,7 @@
     <string name="open_console_for_token">Open console to get Token</string>
     <string name="status_not_running">Stopped</string>
     <string name="tunnel_disabled">Disabled</string>
+    <string name="tunnel_offline">Offline</string>
     <string name="tunnel_failed">Connection failed</string>
     <string name="tunnel_connecting">Connecting</string>
     <string name="tunnel_relay">Relay</string>
@@ -221,5 +230,6 @@
     <string name="tunnel_direct_intranet">LAN direct</string>
     <string name="connect_time">Connected at</string>
     <string name="member_tunnels">Member tunnels</string>
+    <string name="tun_error">TUN error: %1$s</string>
     <string name="unknown_device">Unknown device</string>
 </resources>

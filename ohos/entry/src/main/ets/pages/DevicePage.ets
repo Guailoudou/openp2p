@@ -200,7 +200,7 @@ export struct DevicePage {
   }
 
   @Builder
-  private deviceSwipeActions(device: ManagementDevice) {
+  private deviceStartSwipeActions(device: ManagementDevice) {
     Row() {
       if (device.isActive === 1) {
         Button('映射')
@@ -211,6 +211,14 @@ export struct DevicePage {
           .width(68).height(124).borderRadius(0)
           .fontColor($r('app.color.button_text')).backgroundColor($r('app.color.accent'))
           .onClick((): void => { this.handleDeviceMenuAction(device, 'edit'); })
+      }
+    }.height(124).borderRadius(18).clip(true)
+  }
+
+  @Builder
+  private deviceEndSwipeActions(device: ManagementDevice) {
+    Row() {
+      if (device.isActive === 1) {
         if (this.upgradeUnavailableReason(device).length === 0) {
           Button('升级')
             .width(68).height(124).borderRadius(0)
@@ -795,8 +803,11 @@ export struct DevicePage {
                    .shadow({ radius: 12, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 4 })
                  }
                  .swipeAction({
+                   start: {
+                     builder: (): void => { this.deviceStartSwipeActions(device); }
+                   },
                    end: {
-                     builder: (): void => { this.deviceSwipeActions(device); }
+                     builder: (): void => { this.deviceEndSwipeActions(device); }
                    },
                    edgeEffect: SwipeEdgeEffect.None
                  })

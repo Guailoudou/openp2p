@@ -225,7 +225,7 @@ export struct ProfilePage {
           .backgroundColor(Color.Transparent)
           .enabled(!this.savingAccount)
           .onClick((): void => {
-            this.clearManagementAccount();
+            this.confirmClearManagementAccount();
           })
       } else {
         TextInput({ text: this.accountInput, placeholder: '请输入管理账号' })
@@ -402,6 +402,22 @@ export struct ProfilePage {
     } finally {
       this.savingAccount = false;
     }
+  }
+
+  private confirmClearManagementAccount(): void {
+    this.getUIContext().showAlertDialog({
+      title: '退出登录',
+      message: '退出后将隐藏设备和网络页面，确定继续吗？',
+      autoCancel: true,
+      buttons: [
+        { value: '取消', action: (): void => {} },
+        {
+          value: '退出登录',
+          style: DialogButtonStyle.HIGHLIGHT,
+          action: (): void => { this.clearManagementAccount(); }
+        }
+      ]
+    });
   }
 
   build() {

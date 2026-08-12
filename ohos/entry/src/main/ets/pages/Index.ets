@@ -115,8 +115,9 @@ struct Index {
     this.managementAddTime = '';
     this.managementAuthenticated = false;
     this.controller?.unlockManagedToken();
-    this.selectedTab = 0;
-    this.tabsController.changeIndex(0);
+    // 未登录时页签依次为：首页、日志、我的；与 Android 一致，退出后停留在“我的”。
+    this.selectedTab = 2;
+    this.tabsController.changeIndex(2);
   }
 
   private updateManagementProfile(): void {
@@ -165,12 +166,16 @@ struct Index {
         TabContent() {
           HomePage({
             state: this.state,
+            managementAuthenticated: this.managementAuthenticated,
+            managementUsername: this.managementUsername,
             onToggleCore: (): void => {
               this.controller?.toggleCore();
             },
             onSaveToken: (): void => {
               this.controller?.saveToken();
-            }
+            },
+            onSaveManagementCredentials: async (username: string, password: string): Promise<boolean> =>
+              this.saveManagementCredentials(username, password)
           })
         }
         .tabBar(this.tabBar($r('sys.symbol.house'), $r('sys.symbol.house_fill'), '主页'))
