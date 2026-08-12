@@ -19,6 +19,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
@@ -492,8 +493,83 @@ class MainActivity : AppCompatActivity() {
                         } else password.showError(session.lastError.ifBlank { getString(R.string.login_failed) })
                     }
                 }
+                secondaryAction(getString(R.string.register_account)) {
+                    dialog.dismiss()
+                    showRegistration()
+                }
             }
         }
+    }
+
+    private fun showRegistration() {
+        bottomSheet(getString(R.string.register_title)) { dialog ->
+            label(getString(R.string.register_description), true)
+            val user = field(getString(R.string.username_minimum))
+            val password = field(getString(R.string.password_minimum), password = true)
+            val confirmation = field(getString(R.string.confirm_password), password = true)
+            val phone = field(getString(R.string.phone_optional))
+            val email = field(getString(R.string.email_recovery_hint))
+            val agreement = CheckBox(context).apply {
+                text = getString(R.string.agree_user_agreement)
+                setTextColor(color(R.color.text_primary))
+            }
+            addView(agreement, LinearLayout.LayoutParams(-1, -2))
+            val agreementLinks = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(agreementLink(getString(R.string.view_user_agreement)) {
+                    openAgreement(AGREEMENT_URL)
+                }, LinearLayout.LayoutParams(0, dp(48), 1f))
+                addView(agreementLink(getString(R.string.view_privacy_agreement)) {
+                    openAgreement(PRIVACY_AGREEMENT_URL)
+                }, LinearLayout.LayoutParams(0, dp(48), 1f))
+            }
+            addView(agreementLinks, LinearLayout.LayoutParams(-1, -2))
+            val registerButton = action(getString(R.string.register_and_sign_in)) {}
+            registerButton.setOnClickListener {
+                val username = user.text?.toString()?.trim().orEmpty()
+                val passwordValue = password.text?.toString().orEmpty()
+                val confirmationValue = confirmation.text?.toString().orEmpty()
+                if (username.length < 8 || passwordValue.length < 8) {
+                    user.showError(getString(R.string.username_password_minimum_error))
+                    return@setOnClickListener
+                }
+                if (passwordValue != confirmationValue) {
+                    confirmation.showError(getString(R.string.passwords_do_not_match))
+                    return@setOnClickListener
+                }
+                if (!agreement.isChecked) {
+                    content.snack(getString(R.string.agreement_required))
+                    return@setOnClickListener
+                }
+                registerButton.setLoading(true, getString(R.string.register_and_sign_in), getString(R.string.registering))
+                lifecycleScope.launch {
+                    val ok = session.register(
+                        username, passwordValue, phone.text?.toString().orEmpty(), email.text?.toString().orEmpty()
+                    )
+                    registerButton.setLoading(false, getString(R.string.register_and_sign_in), getString(R.string.registering))
+                    if (ok) {
+                        saveManagedToken(session.profile.token)
+                        rebuildNavigation(true)
+                        dialog.dismiss()
+                        showProfile()
+                        content.snack(getString(R.string.registration_success))
+                    } else confirmation.showError(session.lastError.ifBlank { getString(R.string.registration_failed) })
+                }
+            }
+        }
+    }
+
+    private fun agreementLink(label: String, action: () -> Unit) = TextView(this).apply {
+        text = label
+        textSize = 15f
+        gravity = Gravity.CENTER
+        setTextColor(color(R.color.brand_primary))
+        setOnClickListener { action() }
+    }
+
+    private fun openAgreement(url: String) {
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+            .onFailure { content.snack(getString(R.string.no_browser_available)) }
     }
 
     private fun copySensitive(label: String, value: String) {
@@ -575,5 +651,8 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_BLUETOOTH_PERMISSION_ASKED = "bluetooth_name_permission_asked"
         private const val STATE_SELECTED = "selected_navigation"
         private const val CONSOLE_URL = "https://console.openpxp.com/"
+        private const val AGREEMENT_URL = "https://console.openpxp.com/agreement"
+        private const val PRIVACY_AGREEMENT_URL =
+            "https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=2013507738654513472"
     }
 }

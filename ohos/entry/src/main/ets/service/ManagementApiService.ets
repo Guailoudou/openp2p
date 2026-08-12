@@ -15,6 +15,8 @@ import {
   PortMappingResponse,
   RemoteCheckResponse,
   RemoteCheckRequest,
+  RegisterRequest,
+  RegisterResponse,
   SdwanConfig,
   UserProfileResponse
 } from '../model/ManagementModels';
@@ -39,6 +41,32 @@ export class ManagementApiService {
       throw new Error('管理账号或密码错误');
     }
     return response.token;
+  }
+
+  async register(request: RegisterRequest): Promise<string> {
+    try {
+      const response = await this.request<RegisterResponse>('/api/v2/user/register',
+        http.RequestMethod.POST, request, false);
+      if (response.error !== 0 || !response.token || response.token.length === 0) {
+        throw new Error('注册失败，请稍后重试');
+      }
+      return response.token;
+    } catch (error) {
+      const message = this.errorMessage(error);
+      if (message.includes('(560)')) {
+        throw new Error('该用户名已被注册');
+      }
+      if (message.includes('(561)')) {
+        throw new Error('该邮箱或手机号已被注册');
+      }
+      if (message.includes('(563)')) {
+        throw new Error('用户名和密码不能少于 8 个字符');
+      }
+      if (message.includes('(564)')) {
+        throw new Error('邮箱格式不正确');
+      }
+      throw new Error(message);
+    }
   }
 
   async getUserProfile(): Promise<ManagementUserProfile> {
@@ -198,5 +226,11 @@ export class ManagementApiService {
     } finally {
       request.destroy();
     }
+  }
+
+  private errorMessage(error: Object): string {
+    const value = error as Record<string, Object>;
+    const message = value['message'];
+    return typeof message === 'string' && message.length > 0 ? message : String(error);
   }
 }

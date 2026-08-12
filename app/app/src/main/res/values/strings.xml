@@ -232,4 +232,22 @@
     <string name="member_tunnels">Member tunnels</string>
     <string name="tun_error">TUN error: %1$s</string>
     <string name="unknown_device">Unknown device</string>
+    <string name="register_account">Register account</string>
+    <string name="register_title">Create an account</string>
+    <string name="register_description">After registration, the app signs in automatically and synchronizes the account OpenP2P token.</string>
+    <string name="username_minimum">Username (at least 8 characters)</string>
+    <string name="password_minimum">Password (at least 8 characters)</string>
+    <string name="confirm_password">Confirm password</string>
+    <string name="phone_optional">Phone (optional)</string>
+    <string name="email_recovery_hint">Email (optional, for password recovery)</string>
+    <string name="agree_user_agreement">I have read and agree to the User Agreement and Privacy Agreement</string>
+    <string name="view_user_agreement">View User Agreement</string>
+    <string name="view_privacy_agreement">View Privacy Agreement</string>
+    <string name="register_and_sign_in">Register and sign in</string>
+    <string name="registering">Registering…</string>
+    <string name="registration_success">Registered and signed in</string>
+    <string name="registration_failed">Registration failed</string>
+    <string name="username_password_minimum_error">Username and password must each contain at least 8 characters.</string>
+    <string name="passwords_do_not_match">The passwords do not match.</string>
+    <string name="agreement_required">Read and agree to the User Agreement first.</string>
 </resources>

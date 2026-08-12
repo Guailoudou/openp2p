@@ -121,6 +121,23 @@ struct Index {
     this.tabsController.changeIndex(2);
   }
 
+  private async registerManagementAccount(username: string, password: string, phone: string,
+    email: string): Promise<boolean> {
+    const authenticated = await this.managementSession.registerAndLogin(username, password, phone, email);
+    this.updateManagementProfile();
+    if (!authenticated) {
+      this.controller?.unlockManagedToken();
+      this.managementAuthenticated = false;
+      const message = this.managementSession.getLastError();
+      throw new Error(message.length > 0 ? message : '注册失败，请稍后重试');
+    }
+    await this.controller?.applyManagedToken(this.managementSession.getOpenP2PToken());
+    this.managementAuthenticated = true;
+    this.selectedTab = 4;
+    setTimeout((): void => { this.tabsController.changeIndex(4); }, 0);
+    return true;
+  }
+
   private updateManagementProfile(): void {
     const profile = this.managementSession.getProfile();
     this.managementUsername = profile.user ? profile.user : this.managementSession.getUsername();
@@ -176,7 +193,9 @@ struct Index {
               this.controller?.saveToken();
             },
             onSaveManagementCredentials: async (username: string, password: string): Promise<boolean> =>
-              this.saveManagementCredentials(username, password)
+              this.saveManagementCredentials(username, password),
+            onRegisterManagementAccount: async (username: string, password: string, phone: string,
+              email: string): Promise<boolean> => this.registerManagementAccount(username, password, phone, email)
           })
         }
         .tabBar(this.tabBar($r('sys.symbol.house'), $r('sys.symbol.house_fill'), '主页'))
@@ -216,6 +235,8 @@ struct Index {
             pictureInPictureEnabled: this.pictureInPictureEnabled,
             onSaveManagementCredentials: async (username: string, password: string): Promise<boolean> =>
               this.saveManagementCredentials(username, password),
+            onRegisterManagementAccount: async (username: string, password: string, phone: string,
+              email: string): Promise<boolean> => this.registerManagementAccount(username, password, phone, email),
             onClearManagementCredentials: async (): Promise<void> => this.clearManagementCredentials(),
             onBackgroundKeepAliveChange: async (enabled: boolean): Promise<boolean> =>
               this.setBackgroundKeepAliveEnabled(enabled),

@@ -1,10 +1,12 @@
 import { PageHeader } from '../components/PageHeader';
 import { AboutPage } from './AboutPage';
+import { RegistrationForm } from '../components/RegistrationForm';
 
 @Component
 export struct ProfilePage {
   @State private showAbout: boolean = false;
   @State private showManagementAccount: boolean = false;
+  @State private registrationMode: boolean = false;
   @State private showBackgroundSettings: boolean = false;
   @State private aboutPressed: boolean = false;
   @State private accountInput: string = '';
@@ -29,6 +31,8 @@ export struct ProfilePage {
   @Prop pictureInPictureEnabled: boolean = false;
   onSaveManagementCredentials: (username: string, password: string) => Promise<boolean> =
     async (_username: string, _password: string): Promise<boolean> => false;
+  onRegisterManagementAccount: (username: string, password: string, phone: string, email: string) => Promise<boolean> =
+    async (_username: string, _password: string, _phone: string, _email: string): Promise<boolean> => false;
   onClearManagementCredentials: () => Promise<void> = async (): Promise<void> => {};
   onBackgroundKeepAliveChange: (enabled: boolean) => Promise<boolean> =
     async (_enabled: boolean): Promise<boolean> => false;
@@ -206,8 +210,18 @@ export struct ProfilePage {
 
   @Builder
   private managementAccountSheet() {
-    Column({ space: 18 }) {
-      if (this.managementAuthenticated) {
+    if (this.registrationMode) {
+      RegistrationForm({
+        onRegister: async (username: string, password: string, phone: string, email: string): Promise<boolean> =>
+          this.onRegisterManagementAccount(username, password, phone, email),
+        onRegistered: (): void => {
+          this.registrationMode = false;
+          this.showManagementAccount = false;
+        }
+      })
+    } else {
+      Column({ space: 18 }) {
+        if (this.managementAuthenticated) {
         this.profileItem('账号', this.managementUsername)
         this.managementEmailItem()
         this.managementPhoneItem()
@@ -227,7 +241,7 @@ export struct ProfilePage {
           .onClick((): void => {
             this.confirmClearManagementAccount();
           })
-      } else {
+        } else {
         TextInput({ text: this.accountInput, placeholder: '请输入管理账号' })
           .height(52)
           .fontSize(16)
@@ -263,10 +277,15 @@ export struct ProfilePage {
           .onClick((): void => {
             this.saveManagementAccount();
           })
+          Button('注册账号')
+            .width('100%').height(48).fontColor($r('app.color.accent'))
+            .backgroundColor(Color.Transparent).enabled(!this.savingAccount)
+            .onClick((): void => { this.registrationMode = true; })
+        }
       }
+      .width('100%').height('100%')
+      .padding({ left: 20, right: 20, top: 16, bottom: 32 })
     }
-    .width('100%').height('100%')
-    .padding({ left: 20, right: 20, top: 16, bottom: 32 })
   }
 
   @Builder
@@ -464,15 +483,16 @@ export struct ProfilePage {
             this.accountInput = this.managementUsername;
             this.passwordInput = '';
             this.accountMessage = '';
+            this.registrationMode = false;
             this.managementEmailRevealed = false;
             this.managementPhoneRevealed = false;
             this.showManagementAccount = true;
           })
           .bindSheet($$this.showManagementAccount, this.managementAccountSheet(), {
-            height: SheetSize.MEDIUM,
+            height: this.registrationMode ? SheetSize.LARGE : SheetSize.MEDIUM,
             dragBar: true,
             preferType: SheetType.BOTTOM,
-            title: { title: '管理账号' }
+            title: { title: this.registrationMode ? '注册账号' : '管理账号' }
           })
 
           Row({ space: 14 }) {

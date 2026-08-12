@@ -40,6 +40,27 @@ class ManagementSession private constructor(context: Context) {
         api.setToken(""); username = ""; profile = UserProfile(); lastError = ""
     }
 
+    suspend fun register(user: String, password: String, phone: String, email: String) = mutex.withLock {
+        val clean = user.trim()
+        if (clean.length < 8 || password.length < 8) throw ApiException("用户名和密码不能少于 8 个字符")
+        preferences.edit().putString("username", clean).remove("password").apply()
+        secureStore.putString(SecureCredentialStore.MANAGEMENT_PASSWORD, password)
+        try {
+            val auth = api.register(clean, password, phone.trim(), email.trim())
+            api.setToken(auth)
+            val loaded = api.profile()
+            username = clean; profile = loaded; lastError = ""
+            secureStore.putString(SecureCredentialStore.MANAGEMENT_AUTHORIZATION, auth)
+            secureStore.putString(SecureCredentialStore.MANAGEMENT_OPENP2P_TOKEN, loaded.token)
+            true
+        } catch (error: Exception) {
+            api.setToken(""); username = clean; profile = UserProfile(); lastError = error.message ?: "注册失败"
+            secureStore.remove(SecureCredentialStore.MANAGEMENT_AUTHORIZATION)
+            secureStore.remove(SecureCredentialStore.MANAGEMENT_OPENP2P_TOKEN)
+            false
+        }
+    }
+
     private suspend fun loginInternal(user: String, password: String): Boolean = try {
         val auth = api.login(user, password)
         api.setToken(auth)

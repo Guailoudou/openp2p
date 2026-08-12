@@ -1,4 +1,4 @@
-import { ManagementCredentials, ManagementUserProfile } from '../model/ManagementModels';
+import { ManagementCredentials, ManagementUserProfile, RegisterRequest } from '../model/ManagementModels';
 import { ManagementApiService } from './ManagementApiService';
 import { ManagementCredentialStore } from './ManagementCredentialStore';
 
@@ -56,6 +56,28 @@ export class ManagementSession {
     return this.loginAndSaveToken(credentials);
   }
 
+  async registerAndLogin(username: string, password: string, phone: string, email: string): Promise<boolean> {
+    const credentials: ManagementCredentials = {
+      username: username.trim(),
+      password: password
+    };
+    const request: RegisterRequest = {
+      user: credentials.username,
+      password: credentials.password,
+      phone: phone.trim(),
+      email: email.trim()
+    };
+    await this.store.saveCredentials(credentials);
+    this.username = credentials.username;
+    try {
+      const token = await this.api.register(request);
+      return this.loadProfileAndSaveToken(token);
+    } catch (error) {
+      await this.resetAuthentication(error);
+      return false;
+    }
+  }
+
   async clear(): Promise<void> {
     await this.store.clear();
     this.username = '';
@@ -68,20 +90,28 @@ export class ManagementSession {
   private async loginAndSaveToken(credentials: ManagementCredentials): Promise<boolean> {
     try {
       const token = await this.api.login(credentials);
-      this.api.setToken(token);
-      this.profile = await this.api.getUserProfile();
-      this.openP2PToken = this.profile.token ? this.profile.token : '';
-      await this.store.saveToken(token);
-      this.lastError = '';
-      return true;
+      return this.loadProfileAndSaveToken(token);
     } catch (error) {
-      this.openP2PToken = '';
-      this.lastError = this.errorMessage(error);
-      this.profile = {};
-      this.api.setToken('');
-      await this.store.saveToken('');
+      await this.resetAuthentication(error);
       return false;
     }
+  }
+
+  private async loadProfileAndSaveToken(token: string): Promise<boolean> {
+    this.api.setToken(token);
+    this.profile = await this.api.getUserProfile();
+    this.openP2PToken = this.profile.token ? this.profile.token : '';
+    await this.store.saveToken(token);
+    this.lastError = '';
+    return true;
+  }
+
+  private async resetAuthentication(error: Object): Promise<void> {
+    this.openP2PToken = '';
+    this.lastError = this.errorMessage(error);
+    this.profile = {};
+    this.api.setToken('');
+    await this.store.saveToken('');
   }
 
   private errorMessage(error: Object): string {

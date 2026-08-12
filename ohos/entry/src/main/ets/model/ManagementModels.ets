@@ -13,6 +13,18 @@ export interface LoginResponse {
   token?: string;
 }
 
+export interface RegisterRequest {
+  user: string;
+  password: string;
+  phone: string;
+  email: string;
+}
+
+export interface RegisterResponse {
+  error: number;
+  token?: string;
+}
+
 export interface ManagementUserProfile {
   token?: string;
   user?: string;

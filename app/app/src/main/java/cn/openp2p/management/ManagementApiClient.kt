@@ -29,6 +29,27 @@ class ManagementApiClient {
         return UserProfile(coreToken, p.optString("user"), p.optString("email"), p.optString("phone"), p.optString("addtime"))
     }
 
+    suspend fun register(user: String, password: String, phone: String, email: String): String {
+        val json = request(
+            "/api/v2/user/register", "POST",
+            JSONObject().put("user", user).put("password", password).put("phone", phone).put("email", email),
+            false
+        )
+        val error = json.optInt("error", -1)
+        val token = json.optString("token")
+        if (error != 0 || token.isBlank()) {
+            val message = when (error) {
+                560 -> "该用户名已被注册"
+                561 -> "该邮箱或手机号已被注册"
+                563 -> "用户名和密码不能少于 8 个字符"
+                564 -> "邮箱格式不正确"
+                else -> "注册失败 ($error)"
+            }
+            throw ApiException(message)
+        }
+        return token
+    }
+
     suspend fun devices(): DeviceList {
         val root = request("/api/v1/devices", "GET")
         val array = root.optJSONArray("nodes") ?: JSONArray()
