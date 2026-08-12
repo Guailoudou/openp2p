@@ -99,12 +99,20 @@ export class RuntimeStateStore {
 
   private writeState(state: RuntimeState): void {
     const path = `${this.context.filesDir}/${STATE_FILE}`;
-    const file = fileIo.openSync(path,
-      fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
+    let file: fileIo.File | undefined = undefined;
     try {
+      file = fileIo.openSync(path,
+        fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
       fileIo.writeSync(file.fd, JSON.stringify(state));
+    } catch (error) {
+      throw new Error(`Unable to persist runtime state: ${String(error)}`);
     } finally {
-      fileIo.closeSync(file.fd);
+      if (file !== undefined) {
+        try {
+          fileIo.closeSync(file.fd);
+        } catch (_) {
+        }
+      }
     }
   }
 }

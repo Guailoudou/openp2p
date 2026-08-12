@@ -88,7 +88,11 @@ export class ManagementCredentialStore {
       await asset.add(attributes);
     } catch (error) {
       if (this.errorCode(error) === ASSET_ALREADY_EXISTS) {
-        await asset.update(query, attributesToUpdate);
+        try {
+          await asset.update(query, attributesToUpdate);
+        } catch (updateError) {
+          throw new Error(this.errorMessage(updateError));
+        }
         return;
       }
       throw new Error(this.errorMessage(error));

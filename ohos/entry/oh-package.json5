@@ -1,9 +1,9 @@
 {
   "name": "entry",
-  "version": "3.25.11.1",
+  "version": "0.3",
   "description": "OpenP2P鸿蒙客户端",
   "main": "",
-  "author": "",
+  "author": "Guailoudou",
   "license": "",
   "dependencies": {
     "libentry.so": "file:./src/main/cpp/types/libentry"

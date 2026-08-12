@@ -34,11 +34,19 @@ export class LogExportService {
       const name = relativePath.substring(relativePath.lastIndexOf('/') + 1);
       diagnostics += `\n===== ${name} =====\n${this.maskSensitive(fileIo.readTextSync(sourcePath))}`;
     });
-    const destinationFile = fileIo.openSync(result[0], fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.TRUNC);
+    let destinationFile: fileIo.File | undefined = undefined;
     try {
+      destinationFile = fileIo.openSync(result[0], fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.TRUNC);
       fileIo.writeSync(destinationFile.fd, diagnostics);
+    } catch (error) {
+      throw new Error(`Unable to write diagnostics: ${String(error)}`);
     } finally {
-      fileIo.closeSync(destinationFile.fd);
+      if (destinationFile !== undefined) {
+        try {
+          fileIo.closeSync(destinationFile.fd);
+        } catch (_) {
+        }
+      }
     }
     return true;
   }

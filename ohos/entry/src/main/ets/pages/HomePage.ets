@@ -1,6 +1,7 @@
 import { PageHeader } from '../components/PageHeader';
 import { StatusCard } from '../components/StatusCard';
 import { TokenCard } from '../components/TokenCard';
+import { ConfigurationOverview } from '../components/ConfigurationOverview';
 import { CoreUiState } from '../model/CoreUiState';
 
 @Component
@@ -17,57 +18,6 @@ export struct HomePage {
   onSaveToken: () => void = (): void => {};
   onSaveManagementCredentials: (username: string, password: string) => Promise<boolean> =
     async (_username: string, _password: string): Promise<boolean> => false;
-
-  private tokenSource(): string {
-    if (this.managementAuthenticated) {
-      return '管理账号';
-    }
-    return this.state.token.trim().length > 0 ? '本地配置' : '未配置';
-  }
-
-  private virtualNetworkStatus(): string {
-    switch (this.state.coreState) {
-      case 'vpn_ready':
-        return '已就绪';
-      case 'vpn_requested':
-      case 'vpn_starting':
-        return '正在创建';
-      case 'vpn_waiting_config':
-        return '等待云端配置';
-      case 'failed':
-      case 'recovery_exhausted':
-        return '连接异常';
-      default:
-        return this.state.running ? '等待云端配置' : '未启动';
-    }
-  }
-
-  @Builder
-  private overviewItem(label: string, value: string) {
-    Row() {
-      Text(label).fontSize(14).fontColor($r('app.color.text_secondary'))
-      Blank()
-      Text(value).fontSize(14).fontColor($r('app.color.text_primary'))
-        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-    }.width('100%').padding({ top: 8, bottom: 8 })
-  }
-
-  @Builder
-  private configurationOverview() {
-    Column({ space: 2 }) {
-      Text('配置概览').width('100%').fontSize(18).fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_primary')).margin({ bottom: 6 })
-      this.overviewItem('Token 来源', this.tokenSource())
-      Divider().color($r('app.color.divider'))
-      this.overviewItem('VPN 授权', '启动时请求')
-      Divider().color($r('app.color.divider'))
-      this.overviewItem('虚拟网络', this.virtualNetworkStatus())
-      Divider().color($r('app.color.divider'))
-      this.overviewItem('管理账号', this.managementAuthenticated ? '已登录' : '未登录')
-    }
-    .width('100%').padding(20).backgroundColor($r('app.color.card_background')).borderRadius(20)
-    .shadow({ radius: 20, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 8 })
-  }
 
   @Builder
   private managementAccountSheet() {
@@ -123,7 +73,7 @@ export struct HomePage {
       Column({ space: 18 }) {
         PageHeader({ title: 'OpenP2P', subtitle: '安全、轻量的点对点连接' })
         StatusCard({ state: this.state })
-        this.configurationOverview()
+        ConfigurationOverview({ state: this.state, managementAuthenticated: this.managementAuthenticated })
         if (!this.managementAuthenticated) {
           TokenCard({ state: this.state, onSave: this.onSaveToken })
           Button('登录管理账号')

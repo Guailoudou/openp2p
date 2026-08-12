@@ -333,8 +333,12 @@ export class CoreService {
 
   private ensureLogDirectory(): void {
     const path = `${this.filesDir}/log`;
-    if (!fileIo.accessSync(path)) {
-      fileIo.mkdirSync(path, true);
+    try {
+      if (!fileIo.accessSync(path)) {
+        fileIo.mkdirSync(path, true);
+      }
+    } catch (error) {
+      throw new Error(`Unable to prepare log directory: ${this.formatError(error)}`);
     }
   }
 
@@ -350,12 +354,20 @@ export class CoreService {
 
   private writeText(name: string, value: string): void {
     const path = `${this.filesDir}/${name}`;
-    const file = fileIo.openSync(path,
-      fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
+    let file: fileIo.File | undefined = undefined;
     try {
+      file = fileIo.openSync(path,
+        fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
       fileIo.writeSync(file.fd, value);
+    } catch (error) {
+      throw new Error(`Unable to write ${name}: ${this.formatError(error)}`);
     } finally {
-      fileIo.closeSync(file.fd);
+      if (file !== undefined) {
+        try {
+          fileIo.closeSync(file.fd);
+        } catch (_) {
+        }
+      }
     }
   }
 

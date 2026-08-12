@@ -164,7 +164,12 @@ export class ManagementApiService {
       options.extraData = JSON.stringify(body);
     }
     try {
-      const response = await request.request(`${SERVER_HOST}${path}`, options);
+      let response: http.HttpResponse;
+      try {
+        response = await request.request(`${SERVER_HOST}${path}`, options);
+      } catch (error) {
+        throw new Error(`管理服务请求失败：${String(error)}`);
+      }
       if (response.responseCode < 200 || response.responseCode >= 300) {
         throw new Error(`管理服务请求失败 (${response.responseCode})`);
       }

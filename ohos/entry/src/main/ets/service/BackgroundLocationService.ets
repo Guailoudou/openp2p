@@ -51,22 +51,31 @@ export class BackgroundLocationService {
   }
 
   private hasBackgroundPermission(manager: abilityAccessCtrl.AtManager): boolean {
-    return manager.checkAccessTokenSync(this.context.applicationInfo.accessTokenId,
-      'ohos.permission.LOCATION_IN_BACKGROUND') === abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED;
+    try {
+      return manager.checkAccessTokenSync(this.context.applicationInfo.accessTokenId,
+        'ohos.permission.LOCATION_IN_BACKGROUND') === abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED;
+    } catch (error) {
+      hilog.warn(DOMAIN, TAG, 'Unable to check background location permission: %{public}s', JSON.stringify(error));
+      return false;
+    }
   }
 
   private async openPermissionSettings(): Promise<void> {
     const bundleName = this.context.abilityInfo.bundleName;
-    await this.context.startAbility({
-      bundleName: 'com.huawei.hmos.settings',
-      abilityName: 'com.huawei.hmos.settings.MainAbility',
-      uri: 'application_info_entry',
-      parameters: {
-        settingsParamBundleName: bundleName,
-        pushParams: bundleName
-      }
-    });
-    hilog.info(DOMAIN, TAG, 'Opened application settings for background location permission');
+    try {
+      await this.context.startAbility({
+        bundleName: 'com.huawei.hmos.settings',
+        abilityName: 'com.huawei.hmos.settings.MainAbility',
+        uri: 'application_info_entry',
+        parameters: {
+          settingsParamBundleName: bundleName,
+          pushParams: bundleName
+        }
+      });
+      hilog.info(DOMAIN, TAG, 'Opened application settings for background location permission');
+    } catch (error) {
+      throw new Error(`Unable to open application settings: ${JSON.stringify(error)}`);
+    }
   }
 
   start(): boolean {

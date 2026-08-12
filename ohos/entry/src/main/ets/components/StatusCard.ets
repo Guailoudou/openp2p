@@ -92,7 +92,7 @@ export struct StatusCard {
   }
 
   private startPulse(): void {
-    animateTo({
+    this.getUIContext().animateTo({
       duration: 1200,
       curve: Curve.EaseInOut,
       iterations: -1,

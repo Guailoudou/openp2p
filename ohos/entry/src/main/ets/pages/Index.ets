@@ -34,13 +34,14 @@ struct Index {
   private managementSession: ManagementSession = ManagementSession.getInstance();
 
   aboutToAppear(): void {
-    const context = getContext(this) as common.UIAbilityContext;
-    this.controller = new OpenP2PController(context, this.state);
+    const uiContext = this.getUIContext();
+    const context = uiContext.getHostContext() as common.UIAbilityContext;
+    this.controller = new OpenP2PController(context, this.state, uiContext);
     this.backgroundKeepAliveEnabled = this.controller.isBackgroundKeepAliveEnabled();
     this.simulatedLocationEnabled = this.controller.isSimulatedLocationEnabled();
     this.simulatedDownloadEnabled = this.controller.isSimulatedDownloadEnabled();
     this.pictureInPictureEnabled = this.controller.isPictureInPictureEnabled();
-    this.controller.initializePictureInPicture(this.getUIContext()).catch((error: Object): void => {
+    this.controller.initializePictureInPicture(uiContext).catch((error: Object): void => {
       hilog.warn(DOMAIN, TAG, 'Unable to initialize PiP: %{public}s', JSON.stringify(error));
     });
     this.controller.startPolling();
@@ -64,7 +65,7 @@ struct Index {
     try {
       const mainWindow = await window.getLastWindow(context);
       const avoidArea = mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
-      this.naviIndicatorHeight = px2vp(avoidArea.bottomRect.height);
+      this.naviIndicatorHeight = this.getUIContext().px2vp(avoidArea.bottomRect.height);
     } catch (error) {
       hilog.warn(DOMAIN, TAG, 'Unable to query navigation indicator height: %{public}s', JSON.stringify(error));
     }

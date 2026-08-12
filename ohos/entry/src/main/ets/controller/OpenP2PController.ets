@@ -1,5 +1,4 @@
 import common from '@ohos.app.ability.common';
-import { promptAction } from '@kit.ArkUI';
 import { CoreUiState } from '../model/CoreUiState';
 import { CoreService, CoreStatus } from '../service/CoreService';
 import { LogExportService } from '../service/LogExportService';
@@ -11,14 +10,16 @@ export class OpenP2PController {
   private state: CoreUiState;
   private service: CoreService;
   private logExportService: LogExportService;
+  private uiContext: UIContext;
   private pollTimer: number = -1;
   private lastLogText: string = '';
   private visibleLogText: string = '';
 
-  constructor(context: common.UIAbilityContext, state: CoreUiState) {
+  constructor(context: common.UIAbilityContext, state: CoreUiState, uiContext: UIContext) {
     this.state = state;
     this.service = new CoreService(context);
     this.logExportService = new LogExportService(context);
+    this.uiContext = uiContext;
   }
 
   startPolling(): void {
@@ -34,6 +35,13 @@ export class OpenP2PController {
     if (this.pollTimer >= 0) {
       clearInterval(this.pollTimer);
       this.pollTimer = -1;
+    }
+  }
+
+  private showToast(message: string): void {
+    try {
+      this.uiContext.getPromptAction().showToast({ message });
+    } catch (_) {
     }
   }
 
@@ -55,16 +63,16 @@ export class OpenP2PController {
     const token = this.state.token.trim();
     const error = this.validateToken(token);
     if (error.length > 0) {
-      promptAction.showToast({ message: error });
+      this.showToast(error);
       return;
     }
     this.state.busy = true;
     try {
       await this.service.saveToken(token);
       this.state.token = token;
-      promptAction.showToast({ message: 'Token 已安全保存在本机' });
+      this.showToast('Token 已安全保存在本机');
     } catch (error) {
-      promptAction.showToast({ message: this.errorMessage(error) });
+      this.showToast(this.errorMessage(error));
     } finally {
       this.state.busy = false;
     }
@@ -108,11 +116,9 @@ export class OpenP2PController {
   async setBackgroundKeepAliveEnabled(enabled: boolean): Promise<boolean> {
     const available = await this.service.setBackgroundKeepAliveEnabled(enabled);
     if (enabled) {
-      promptAction.showToast({
-        message: available ? '持续后台任务已开启' : '设置已保存，系统任务不可用时将依赖其他保活方式'
-      });
+      this.showToast(available ? '持续后台任务已开启' : '设置已保存，系统任务不可用时将依赖其他保活方式');
     } else {
-      promptAction.showToast({ message: '持续后台任务已关闭' });
+      this.showToast('持续后台任务已关闭');
     }
     return true;
   }
@@ -120,32 +126,30 @@ export class OpenP2PController {
   async setSimulatedLocationEnabled(enabled: boolean): Promise<boolean> {
     const available = await this.service.setSimulatedLocationEnabled(enabled);
     if (!available && enabled) {
-      promptAction.showToast({ message: '设置已保存，授予定位和后台定位权限后生效' });
+      this.showToast('设置已保存，授予定位和后台定位权限后生效');
       return true;
     }
-    promptAction.showToast({
-      message: enabled ? '模拟定位已开启，请在系统设置中选择“始终允许”' : '模拟定位保活已关闭'
-    });
+    this.showToast(enabled ? '模拟定位已开启，请在系统设置中选择“始终允许”' : '模拟定位保活已关闭');
     return true;
   }
 
   async setSimulatedDownloadEnabled(enabled: boolean): Promise<boolean> {
     const available = await this.service.setSimulatedDownloadEnabled(enabled);
     if (!available && enabled) {
-      promptAction.showToast({ message: '设置已保存，开启通知权限后生效' });
+      this.showToast('设置已保存，开启通知权限后生效');
       return true;
     }
-    promptAction.showToast({ message: enabled ? '模拟下载保活已开启' : '模拟下载保活已关闭' });
+    this.showToast(enabled ? '模拟下载保活已开启' : '模拟下载保活已关闭');
     return true;
   }
 
   async setPictureInPictureEnabled(enabled: boolean, uiContext: UIContext): Promise<boolean> {
     const available = await this.service.setPictureInPictureEnabled(enabled, uiContext);
     if (!available && enabled) {
-      promptAction.showToast({ message: '设置已保存，当前设备不支持画中画' });
+      this.showToast('设置已保存，当前设备不支持画中画');
       return true;
     }
-    promptAction.showToast({ message: enabled ? '画中画保活已开启' : '画中画保活已关闭' });
+    this.showToast(enabled ? '画中画保活已开启' : '画中画保活已关闭');
     return true;
   }
 
@@ -153,10 +157,10 @@ export class OpenP2PController {
     try {
       const exported = await this.logExportService.export();
       if (exported) {
-        promptAction.showToast({ message: '日志已导出为 openp2p.log' });
+        this.showToast('日志已导出为 openp2p.log');
       }
     } catch (error) {
-      promptAction.showToast({ message: `导出日志失败：${this.errorMessage(error)}` });
+      this.showToast(`导出日志失败：${this.errorMessage(error)}`);
     }
   }
 
@@ -167,7 +171,7 @@ export class OpenP2PController {
         this.state.token = token;
       }
     } catch (error) {
-      promptAction.showToast({ message: `读取本地 Token 失败：${this.errorMessage(error)}` });
+      this.showToast(`读取本地 Token 失败：${this.errorMessage(error)}`);
     }
   }
 
@@ -175,7 +179,7 @@ export class OpenP2PController {
     const token = this.state.token.trim();
     const error = this.validateToken(token);
     if (error.length > 0) {
-      promptAction.showToast({ message: error });
+      this.showToast(error);
       return;
     }
 
@@ -184,10 +188,11 @@ export class OpenP2PController {
     this.state.token = token;
     this.resetVisibleLogs();
     try {
+      this.showToast('核心已启动，正在登录');
       await this.service.start(token);
-      promptAction.showToast({ message: '核心已启动，正在登录' });
+      this.showToast('核心已连接');
     } catch (error) {
-      promptAction.showToast({ message: this.errorMessage(error) });
+      this.showToast(this.errorMessage(error));
     } finally {
       this.state.busy = false;
       this.refresh();
@@ -199,9 +204,9 @@ export class OpenP2PController {
     try {
       await this.service.stop();
       this.state.connected = false;
-      promptAction.showToast({ message: '核心已停止' });
+      this.showToast('核心已停止');
     } catch (error) {
-      promptAction.showToast({ message: this.errorMessage(error) });
+      this.showToast(this.errorMessage(error));
     } finally {
       this.state.busy = false;
       this.refresh();
