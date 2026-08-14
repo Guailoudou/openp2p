@@ -3,12 +3,20 @@ import { fileIo } from '@kit.CoreFileKit';
 
 const STATE_FILE = 'opl_runtime_state.json';
 
+export enum AppColorMode {
+  SYSTEM = 'system',
+  DARK = 'dark',
+  LIGHT = 'light'
+}
+
 interface RuntimeState {
   desiredRunning: boolean;
   backgroundKeepAliveEnabled?: boolean;
   simulatedLocationEnabled?: boolean;
   simulatedDownloadEnabled?: boolean;
   pictureInPictureEnabled?: boolean;
+  themeColor?: string;
+  colorMode?: AppColorMode;
 }
 
 export class RuntimeStateStore {
@@ -36,6 +44,14 @@ export class RuntimeStateStore {
 
   isPictureInPictureEnabled(): boolean {
     return this.readState().pictureInPictureEnabled === true;
+  }
+
+  getThemeColor(): string {
+    return this.readState().themeColor ?? '#0A59F7';
+  }
+
+  getColorMode(): AppColorMode {
+    return this.readState().colorMode ?? AppColorMode.SYSTEM;
   }
 
   setDesiredRunning(desiredRunning: boolean): void {
@@ -68,6 +84,18 @@ export class RuntimeStateStore {
     this.writeState(state);
   }
 
+  setThemeColor(color: string): void {
+    const state = this.readState();
+    state.themeColor = color;
+    this.writeState(state);
+  }
+
+  setColorMode(colorMode: AppColorMode): void {
+    const state = this.readState();
+    state.colorMode = colorMode;
+    this.writeState(state);
+  }
+
   private readState(): RuntimeState {
     try {
       const path = `${this.context.filesDir}/${STATE_FILE}`;
@@ -80,7 +108,10 @@ export class RuntimeStateStore {
         backgroundKeepAliveEnabled: state.backgroundKeepAliveEnabled !== false,
         simulatedLocationEnabled: state.simulatedLocationEnabled === true,
         simulatedDownloadEnabled: state.simulatedDownloadEnabled === true,
-        pictureInPictureEnabled: state.pictureInPictureEnabled === true
+        pictureInPictureEnabled: state.pictureInPictureEnabled === true,
+        themeColor: state.themeColor ?? '#0A59F7',
+        colorMode: state.colorMode === AppColorMode.DARK || state.colorMode === AppColorMode.LIGHT ?
+          state.colorMode : AppColorMode.SYSTEM
       };
     } catch (_) {
       return this.defaultState();
@@ -93,7 +124,9 @@ export class RuntimeStateStore {
       backgroundKeepAliveEnabled: true,
       simulatedLocationEnabled: false,
       simulatedDownloadEnabled: false,
-      pictureInPictureEnabled: false
+      pictureInPictureEnabled: false,
+      themeColor: '#0A59F7',
+      colorMode: AppColorMode.SYSTEM
     };
   }
 

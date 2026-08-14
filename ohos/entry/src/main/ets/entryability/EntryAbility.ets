@@ -9,6 +9,7 @@ import {
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { CoreService } from '../service/CoreService';
+import { AppColorMode, RuntimeStateStore } from '../service/RuntimeStateStore';
 
 const DOMAIN = 0x0000;
 
@@ -16,11 +17,6 @@ export default class EntryAbility extends UIAbility {
   private coreService?: CoreService;
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
-    try {
-      this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
-    } catch (err) {
-      hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
-    }
     this.coreService = new CoreService(this.context);
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
   }
@@ -36,6 +32,7 @@ export default class EntryAbility extends UIAbility {
         hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
         return;
       }
+      this.applyStoredColorMode();
       this.coreService?.initializePictureInPicture(windowStage.getMainWindowSync().getUIContext())
         .catch((error: Object): void => {
           hilog.warn(DOMAIN, 'testTag', 'PiP initialization unavailable: %{public}s', JSON.stringify(error));
@@ -43,6 +40,21 @@ export default class EntryAbility extends UIAbility {
       this.ensureDeviceNamePermission();
       hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
     });
+  }
+
+  private applyStoredColorMode(): void {
+    const mode = new RuntimeStateStore(this.context).getColorMode();
+    let systemMode = ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET;
+    if (mode === AppColorMode.DARK) {
+      systemMode = ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
+    } else if (mode === AppColorMode.LIGHT) {
+      systemMode = ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT;
+    }
+    try {
+      this.context.getApplicationContext().setColorMode(systemMode);
+    } catch (error) {
+      hilog.error(DOMAIN, 'testTag', 'Failed to restore colorMode. Cause: %{public}s', JSON.stringify(error));
+    }
   }
 
   onWindowStageDestroy(): void {

@@ -9,6 +9,8 @@ import { ManagementSession } from '../service/ManagementSession';
 
 @Component
 export struct DevicePage {
+  @Consume private themeColor: string;
+  @Consume private themeSoftColor: string;
   @State private devices: ManagementDevice[] = [];
   @State private latestVersion: string = '';
   @State private mappings: PortMapping[] = [];
@@ -33,8 +35,11 @@ export struct DevicePage {
   @State private mappingWhitelist: string = '';
   @State private mappingRelayNode: string = '';
   @State private originalProtocol: string = '';
+  scrollController: Scroller = new Scroller();
   @State private originalSourcePort: number = 0;
   private refreshInFlight: boolean = false;
+  private refreshSequence: number = 0;
+  private activeRefreshId: number = 0;
   private session: ManagementSession = ManagementSession.getInstance();
 
   aboutToAppear(): void {
@@ -115,17 +120,30 @@ export struct DevicePage {
     return this.selectedDeviceName;
   }
 
-  private async loadDevices(): Promise<void> {
+  private isCurrentRefresh(refreshId: number): boolean {
+    return refreshId === 0 || refreshId === this.activeRefreshId;
+  }
+
+  private async loadDevices(refreshId: number = 0): Promise<boolean> {
     this.loading = true;
     this.message = '';
     try {
       const response = await this.session.api.getDevices();
+      if (!this.isCurrentRefresh(refreshId)) {
+        return false;
+      }
       this.devices = response.nodes ? response.nodes : [];
       this.latestVersion = response.latestVer ? response.latestVer : '';
+      return true;
     } catch (error) {
-      this.message = `加载设备失败：${String(error)}`;
+      if (this.isCurrentRefresh(refreshId)) {
+        this.message = `加载设备失败：${String(error)}`;
+      }
+      return false;
     } finally {
-      this.loading = false;
+      if (this.isCurrentRefresh(refreshId)) {
+        this.loading = false;
+      }
     }
   }
 
@@ -135,10 +153,26 @@ export struct DevicePage {
     }
     this.refreshInFlight = true;
     this.refreshing = true;
-    try {
-      await this.loadDevices();
-    } finally {
+    const refreshId = ++this.refreshSequence;
+    this.activeRefreshId = refreshId;
+    setTimeout((): void => {
+      if (this.activeRefreshId !== refreshId) {
+        return;
+      }
+      this.activeRefreshId = 0;
       this.refreshInFlight = false;
+      this.loading = false;
+      this.refreshing = false;
+      this.message = '刷新设备超时，请稍后重试';
+      this.showToast(this.message);
+    }, 5000);
+    const succeeded = await this.loadDevices(refreshId);
+    if (this.activeRefreshId !== refreshId) {
+      return;
+    }
+    this.activeRefreshId = 0;
+    this.refreshInFlight = false;
+    if (succeeded) {
       this.refreshing = false;
     }
   }
@@ -205,11 +239,11 @@ export struct DevicePage {
       if (device.isActive === 1) {
         Button('映射')
           .width(68).height(124).borderRadius(0)
-          .fontColor($r('app.color.button_text')).backgroundColor($r('app.color.accent'))
+          .fontColor($r('app.color.button_text')).backgroundColor(this.themeColor)
           .onClick((): void => { this.handleDeviceMenuAction(device, 'mappings'); })
         Button('编辑')
           .width(68).height(124).borderRadius(0)
-          .fontColor($r('app.color.button_text')).backgroundColor($r('app.color.accent'))
+          .fontColor($r('app.color.button_text')).backgroundColor(this.themeColor)
           .onClick((): void => { this.handleDeviceMenuAction(device, 'edit'); })
       }
     }.height(124).borderRadius(18).clip(true)
@@ -613,10 +647,10 @@ export struct DevicePage {
                   Text(this.mappingStatus(mapping))
                     .fontSize(12)
                     .fontColor(mapping.enabled !== 1 ? $r('app.color.status_idle') :
-                      (mapping.isActive === 1 ? $r('app.color.accent') : $r('app.color.status_connecting')))
+                      (mapping.isActive === 1 ? this.themeColor : $r('app.color.status_connecting')))
                     .padding({ left: 10, right: 10, top: 4, bottom: 4 })
                     .backgroundColor(mapping.isActive === 1 && mapping.enabled === 1 ?
-                      $r('app.color.accent_soft') : $r('app.color.badge_background'))
+                      this.themeSoftColor : $r('app.color.badge_background'))
                     .borderRadius(12)
                   if (mapping.connectTime && mapping.connectTime.length > 0 && mapping.isActive === 1) {
                     Text(this.formatConnectTime(mapping.connectTime))
@@ -754,12 +788,13 @@ export struct DevicePage {
       }
     }
     .width('100%').height(this.sheetMode === 'mappings' || this.sheetMode === 'editMapping' ? '100%' : undefined)
+    .justifyContent(FlexAlign.Start).alignItems(HorizontalAlign.Start)
     .padding({ left: 20, right: 20, top: 12, bottom: 32 })
   }
 
   build() {
     Refresh({ refreshing: $$this.refreshing }) {
-      Scroll() {
+      Scroll(this.scrollController) {
         Column({ space: 16 }) {
           PageHeader({ title: '设备', subtitle: '管理 OpenP2P 设备与端口映射' })
           if (this.message.length > 0) {
@@ -818,9 +853,12 @@ export struct DevicePage {
              }, (device: ManagementDevice): string => this.deviceCardKey(device))
           }
         }
-        .width('100%').padding({ left: 20, right: 20, top: 24, bottom: 128 })
+        .width('100%')
+        .justifyContent(FlexAlign.Start).alignItems(HorizontalAlign.Start)
+        .padding({ left: 20, right: 20, top: 24, bottom: 128 })
       }
       .width('100%').height('100%')
+      .align(Alignment.Top)
       .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     }
     .onRefreshing((): void => { this.refreshDevices(); })

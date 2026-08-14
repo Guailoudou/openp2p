@@ -262,17 +262,11 @@ class MainActivity : AppCompatActivity() {
                 token.isNotBlank() -> R.string.token_source_local
                 else -> R.string.token_source_missing
             }))
-            keyValue(getString(R.string.vpn_permission), getString(if (vpnPermissionRequired) {
-                R.string.vpn_permission_required
-            } else {
-                R.string.vpn_permission_ready
-            }))
             keyValue(
                 getString(R.string.virtual_network_status),
                 prefs.getString(OpenP2PService.KEY_TUN_STATE, getString(R.string.virtual_network_waiting))
                     ?: getString(R.string.virtual_network_waiting)
             )
-            keyValue(getString(R.string.management_account), getString(if (session.authenticated) R.string.account_signed_in else R.string.account_signed_out))
             if (vpnPermissionRequired) {
                 secondaryAction(getString(R.string.reauthorize_vpn)) { requestStartCore() }
             }

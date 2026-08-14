@@ -3,9 +3,11 @@ import { CoreUiState } from '../model/CoreUiState';
 
 @Component
 export struct LogsPage {
+  @Consume private themeColor: string;
+  @Consume private themeSoftColor: string;
   @ObjectLink @Watch('onLogStateChanged') state: CoreUiState;
   onExportLog: () => void = (): void => {};
-  private logScroller: Scroller = new Scroller();
+  scrollController: Scroller = new Scroller();
   private scrollTimer: number = -1;
 
   aboutToAppear(): void {
@@ -33,7 +35,7 @@ export struct LogsPage {
     this.scrollTimer = setTimeout((): void => {
       const lastIndex = this.state.logs.length - 1;
       if (lastIndex >= 0) {
-        this.logScroller.scrollToIndex(lastIndex, smooth, ScrollAlign.END);
+        this.scrollController.scrollToIndex(lastIndex, smooth, ScrollAlign.END);
       }
       this.scrollTimer = -1;
     }, 0);
@@ -59,8 +61,8 @@ export struct LogsPage {
     }
     .layoutWeight(1)
     .width('100%')
-    .justifyContent(FlexAlign.Center)
-    .padding({ left: 40, right: 40 })
+    .justifyContent(FlexAlign.Start)
+    .padding({ left: 40, right: 40, top: 40 })
   }
 
   build() {
@@ -75,16 +77,16 @@ export struct LogsPage {
           Row({ space: 6 }) {
             SymbolGlyph($r('sys.symbol.share'))
               .fontSize(16)
-              .fontColor([$r('app.color.accent')])
+              .fontColor([this.themeColor])
             Text('导出')
               .fontSize(14)
               .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.accent'))
+              .fontColor(this.themeColor)
           }
         }
         .height(38)
         .padding({ left: 16, right: 16 })
-        .backgroundColor($r('app.color.accent_soft'))
+        .backgroundColor(this.themeSoftColor)
         .borderRadius(19)
         .onClick((): void => this.onExportLog())
       }
@@ -94,7 +96,7 @@ export struct LogsPage {
       if (this.state.logs.length === 0) {
         this.emptyState()
       } else {
-        List({ space: 0, scroller: this.logScroller }) {
+        List({ space: 0, scroller: this.scrollController }) {
           ForEach(this.state.logs, (line: string, index: number) => {
             ListItem() {
               Text(line)
@@ -119,6 +121,8 @@ export struct LogsPage {
     }
     .width('100%')
     .height('100%')
+    .justifyContent(FlexAlign.Start)
+    .alignItems(HorizontalAlign.Start)
     .padding({ left: 20, right: 20, top: 24, bottom: 24 })
     .backgroundColor($r('app.color.page_background'))
   }

@@ -47,6 +47,9 @@ export class OpenP2PController {
 
   async toggleCore(): Promise<void> {
     if (this.state.busy) {
+      if (this.state.running) {
+        await this.stopCore();
+      }
       return;
     }
     if (this.state.running) {
@@ -184,6 +187,7 @@ export class OpenP2PController {
     }
 
     this.state.busy = true;
+    this.state.running = true;
     this.state.connected = false;
     this.state.token = token;
     this.resetVisibleLogs();
@@ -201,9 +205,10 @@ export class OpenP2PController {
 
   private async stopCore(): Promise<void> {
     this.state.busy = true;
+    this.state.running = false;
+    this.state.connected = false;
     try {
       await this.service.stop();
-      this.state.connected = false;
       this.showToast('核心已停止');
     } catch (error) {
       this.showToast(this.errorMessage(error));

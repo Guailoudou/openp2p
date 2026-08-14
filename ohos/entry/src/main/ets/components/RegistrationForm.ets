@@ -1,5 +1,6 @@
 @Component
 export struct RegistrationForm {
+  @Consume private themeColor: string;
   @State private username: string = '';
   @State private password: string = '';
   @State private passwordConfirmation: string = '';
@@ -72,17 +73,17 @@ export struct RegistrationForm {
           .onChange((value: string): void => { this.email = value; this.message = ''; })
         Row({ space: 8 }) {
           Toggle({ type: ToggleType.Checkbox, isOn: this.agreed })
-            .selectedColor($r('app.color.accent'))
+            .selectedColor(this.themeColor)
             .onChange((value: boolean): void => { this.agreed = value; this.message = ''; })
           Text('我已阅读并同意').fontSize(14).fontColor($r('app.color.text_secondary'))
           Hyperlink('https://console.openpxp.com/agreement', '用户协议')
-            .color($r('app.color.accent'))
+            .color(this.themeColor)
           Text('和').fontSize(14).fontColor($r('app.color.text_secondary'))
           Hyperlink(
             'https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=2013507738654513472',
             '隐私协议'
           )
-            .color($r('app.color.accent'))
+            .color(this.themeColor)
         }
         .width('100%').alignItems(VerticalAlign.Center)
         if (this.message.length > 0) {

@@ -9,6 +9,8 @@ import { ManagementSession } from '../service/ManagementSession';
 
 @Component
 export struct NetworkPage {
+  @Consume private themeColor: string;
+  @Consume private themeSoftColor: string;
   @State private devices: ManagementDevice[] = [];
   @State private config: SdwanConfig = {
     gateway: '10.0.0.0/24',
@@ -28,7 +30,10 @@ export struct NetworkPage {
   @State private memberConnections: PortMapping[] = [];
   @State private memberTunError: string = '';
   private refreshInFlight: boolean = false;
+  private refreshSequence: number = 0;
+  private activeRefreshId: number = 0;
   private session: ManagementSession = ManagementSession.getInstance();
+  scrollController: Scroller = new Scroller();
 
   private tunnelStatus(mapping: PortMapping): string {
     if (mapping.isActive === undefined) {
@@ -67,15 +72,19 @@ export struct NetworkPage {
     this.loadData();
   }
 
-  private async loadData(): Promise<void> {
+  private isCurrentRefresh(refreshId: number): boolean {
+    return refreshId === 0 || refreshId === this.activeRefreshId;
+  }
+
+  private async loadData(refreshId: number = 0): Promise<boolean> {
     this.loading = true;
     this.message = '';
     try {
       const deviceResponse = await this.session.api.getDevices();
-      this.devices = deviceResponse.nodes ? deviceResponse.nodes : [];
+      const devices = deviceResponse.nodes ? deviceResponse.nodes : [];
       const config = await this.session.api.getSdwan();
       const refreshedNodes: SdwanMember[] = config.Nodes.map((member: SdwanMember): SdwanMember => {
-        const device = this.devices.find((item: ManagementDevice): boolean => item.name === member.name);
+        const device = devices.find((item: ManagementDevice): boolean => item.name === member.name);
         return {
           name: member.name,
           ip: member.ip,
@@ -83,6 +92,10 @@ export struct NetworkPage {
           isActive: device ? device.isActive : 0
         };
       });
+      if (!this.isCurrentRefresh(refreshId)) {
+        return false;
+      }
+      this.devices = devices;
       this.config = {
         gateway: config.gateway,
         mode: config.mode,
@@ -91,10 +104,16 @@ export struct NetworkPage {
         punchPriority: config.punchPriority,
         Nodes: refreshedNodes
       };
+      return true;
     } catch (error) {
-      this.message = `加载网络配置失败：${String(error)}`;
+      if (this.isCurrentRefresh(refreshId)) {
+        this.message = `加载网络配置失败：${String(error)}`;
+      }
+      return false;
     } finally {
-      this.loading = false;
+      if (this.isCurrentRefresh(refreshId)) {
+        this.loading = false;
+      }
     }
   }
 
@@ -104,10 +123,26 @@ export struct NetworkPage {
     }
     this.refreshInFlight = true;
     this.refreshing = true;
-    try {
-      await this.loadData();
-    } finally {
+    const refreshId = ++this.refreshSequence;
+    this.activeRefreshId = refreshId;
+    setTimeout((): void => {
+      if (this.activeRefreshId !== refreshId) {
+        return;
+      }
+      this.activeRefreshId = 0;
       this.refreshInFlight = false;
+      this.loading = false;
+      this.refreshing = false;
+      this.message = '刷新网络配置超时，请稍后重试';
+      this.showToast(this.message);
+    }, 5000);
+    const succeeded = await this.loadData(refreshId);
+    if (this.activeRefreshId !== refreshId) {
+      return;
+    }
+    this.activeRefreshId = 0;
+    this.refreshInFlight = false;
+    if (succeeded) {
       this.refreshing = false;
     }
   }
@@ -238,7 +273,7 @@ export struct NetworkPage {
       Button('编辑')
         .width(76).height(64).borderRadius(0)
         .fontColor($r('app.color.button_text'))
-        .backgroundColor($r('app.color.accent'))
+        .backgroundColor(this.themeColor)
         .onClick((): void => { this.openMember(member); })
       Button('移除')
         .width(76).height(64).borderRadius(0)
@@ -409,12 +444,12 @@ export struct NetworkPage {
       Button('P2P 模式')
         .layoutWeight(1)
         .fontColor(this.config.mode === 'fullmesh' ? $r('app.color.button_text') : $r('app.color.text_primary'))
-        .backgroundColor(this.config.mode === 'fullmesh' ? $r('app.color.accent') : $r('app.color.page_background'))
+        .backgroundColor(this.config.mode === 'fullmesh' ? this.themeColor : $r('app.color.page_background'))
         .onClick((): void => { this.config.mode = 'fullmesh'; this.refreshConfig(); })
       Button('中心模式')
         .layoutWeight(1)
         .fontColor(this.config.mode === 'central' ? $r('app.color.button_text') : $r('app.color.text_primary'))
-        .backgroundColor(this.config.mode === 'central' ? $r('app.color.accent') : $r('app.color.page_background'))
+        .backgroundColor(this.config.mode === 'central' ? this.themeColor : $r('app.color.page_background'))
         .onClick((): void => { this.config.mode = 'central'; this.refreshConfig(); })
     }.width('100%')
   }
@@ -459,7 +494,7 @@ export struct NetworkPage {
                 Text(this.tunnelStatus(mapping))
                   .fontSize(13)
                   .fontColor(mapping.isActive === undefined ? $r('app.color.status_idle') :
-                    (mapping.isActive === 1 ? $r('app.color.accent') :
+                    (mapping.isActive === 1 ? this.themeColor :
                       (mapping.error && mapping.error.length > 0 ? $r('app.color.status_failed') :
                         $r('app.color.status_connecting'))))
               }.width('100%')
@@ -487,7 +522,7 @@ export struct NetworkPage {
 
   build() {
     Refresh({ refreshing: $$this.refreshing }) {
-      Scroll() {
+      Scroll(this.scrollController) {
         Column({ space: 16 }) {
           PageHeader({ title: '网络', subtitle: '管理 SD-WAN 网关、模式与成员' })
         if (this.message.length > 0) {
@@ -538,10 +573,10 @@ export struct NetworkPage {
                     }.layoutWeight(1).alignItems(HorizontalAlign.Start)
                     Text(member.isActive === 1 ? '在线' : '离线')
                       .fontSize(12)
-                      .fontColor(member.isActive === 1 ? $r('app.color.accent') :
+                      .fontColor(member.isActive === 1 ? this.themeColor :
                         $r('app.color.status_idle'))
                       .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-                      .backgroundColor(member.isActive === 1 ? $r('app.color.accent_soft') :
+                      .backgroundColor(member.isActive === 1 ? this.themeSoftColor :
                         $r('app.color.badge_background'))
                       .borderRadius(12)
                   }
@@ -578,9 +613,12 @@ export struct NetworkPage {
         Button(this.loading ? '正在保存…' : '保存网络配置')
           .width('100%').height(50).enabled(!this.loading).onClick((): void => { this.saveNetwork(); })
         }
-        .width('100%').padding({ left: 20, right: 20, top: 24, bottom: 128 })
+        .width('100%')
+        .justifyContent(FlexAlign.Start).alignItems(HorizontalAlign.Start)
+        .padding({ left: 20, right: 20, top: 24, bottom: 128 })
       }
       .width('100%').height('100%')
+      .align(Alignment.Top)
       .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     }
     .onRefreshing((): void => { this.refreshData(); })

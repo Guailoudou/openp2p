@@ -7,6 +7,8 @@ import { CoreUiState } from '../model/CoreUiState';
 
 @Component
 export struct HomePage {
+  @Consume private themeColor: string;
+  @Consume private themeSoftColor: string;
   @ObjectLink state: CoreUiState;
   @Prop managementAuthenticated: boolean = false;
   @Prop managementUsername: string = '';
@@ -16,7 +18,8 @@ export struct HomePage {
   @State private passwordInput: string = '';
   @State private accountMessage: string = '';
   @State private savingAccount: boolean = false;
-  onToggleCore: () => void = (): void => {};
+  scrollController: Scroller = new Scroller();
+  onOpenSettings: () => void = (): void => {};
   onSaveToken: () => void = (): void => {};
   onSaveManagementCredentials: (username: string, password: string) => Promise<boolean> =
     async (_username: string, _password: string): Promise<boolean> => false;
@@ -50,7 +53,7 @@ export struct HomePage {
           .width('100%').height(48).enabled(!this.savingAccount)
           .onClick((): void => { this.saveManagementAccount(); })
         Button('注册账号')
-          .width('100%').height(48).fontColor($r('app.color.accent'))
+          .width('100%').height(48).fontColor(this.themeColor)
           .backgroundColor(Color.Transparent).enabled(!this.savingAccount)
           .onClick((): void => { this.registrationMode = true; })
       }
@@ -88,16 +91,38 @@ export struct HomePage {
   }
 
   build() {
-    Scroll() {
+    Scroll(this.scrollController) {
       Column({ space: 18 }) {
-        PageHeader({ title: 'OpenP2P', subtitle: '安全、轻量的点对点连接' })
+        Row({ space: 12 }) {
+          Row() {
+            PageHeader({ title: 'OpenP2P', subtitle: '安全、轻量的点对点连接' })
+          }
+          .layoutWeight(1)
+
+          Button() {
+            SymbolGlyph($r('sys.symbol.gearshape_fill'))
+              .fontSize(22)
+              .fontColor([$r('app.color.text_primary')])
+          }
+          .width(44)
+          .height(44)
+          .type(ButtonType.Circle)
+          .backgroundColor($r('app.color.card_background'))
+          .shadow({ radius: 10, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 4 })
+          .accessibilityText('设置')
+          .onClick((): void => {
+            this.onOpenSettings();
+          })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Top)
         StatusCard({ state: this.state })
         ConfigurationOverview({ state: this.state, managementAuthenticated: this.managementAuthenticated })
         if (!this.managementAuthenticated) {
           TokenCard({ state: this.state, onSave: this.onSaveToken })
           Button('登录管理账号')
-            .width('100%').height(48).fontColor($r('app.color.accent'))
-            .backgroundColor($r('app.color.accent_soft')).borderRadius(14)
+            .width('100%').height(48).fontColor(this.themeColor)
+            .backgroundColor(this.themeSoftColor).borderRadius(14)
             .onClick((): void => {
               this.accountInput = this.managementUsername;
               this.passwordInput = '';
@@ -106,48 +131,15 @@ export struct HomePage {
               this.showManagementAccount = true;
             })
         }
-
-        Column() {
-          Button() {
-            Row({ space: 10 }) {
-              if (this.state.busy) {
-                LoadingProgress()
-                  .width(22)
-                  .height(22)
-                  .color($r('app.color.button_text'))
-              } else {
-                SymbolGlyph(this.state.running ?
-                  $r('sys.symbol.stop_circle_fill') : $r('sys.symbol.play_fill'))
-                  .fontSize(20)
-                  .fontColor([$r('app.color.button_text')])
-                Text(this.state.running ? '停止核心' : '启动核心')
-                  .fontSize(17)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.button_text'))
-              }
-            }
-            .justifyContent(FlexAlign.Center)
-          }
-          .width('100%')
-          .height(56)
-          .backgroundColor(this.state.running ? $r('app.color.danger') : $r('app.color.accent'))
-          .borderRadius(16)
-          .enabled(!this.state.busy)
-          .shadow({
-            radius: this.state.running ? 12 : 18,
-            color: this.state.running ? $r('app.color.danger_shadow') : $r('app.color.accent_shadow'),
-            offsetX: 0,
-            offsetY: 6
-          })
-          .onClick((): void => this.onToggleCore())
-        }
-        .width('100%')
       }
       .width('100%')
+      .justifyContent(FlexAlign.Start)
+      .alignItems(HorizontalAlign.Start)
       .padding({ left: 20, right: 20, top: 24, bottom: 128 })
     }
     .width('100%')
     .height('100%')
+    .align(Alignment.Top)
     .backgroundColor($r('app.color.page_background'))
     .bindSheet($$this.showManagementAccount, this.managementAccountSheet(), {
       height: this.registrationMode ? SheetSize.LARGE : SheetSize.MEDIUM,

@@ -6,7 +6,6 @@ export struct ConfigurationOverview {
   @Prop @Watch('onOverviewSourceChanged') managementAuthenticated: boolean = false;
   @State private tokenSourceText: string = '未配置';
   @State private virtualNetworkText: string = '未启动';
-  @State private managementAccountText: string = '未登录';
 
   aboutToAppear(): void {
     this.refreshOverview();
@@ -19,7 +18,6 @@ export struct ConfigurationOverview {
   private refreshOverview(): void {
     this.tokenSourceText = this.managementAuthenticated ? '管理账号' :
       (this.state.token.trim().length > 0 ? '本地配置' : '未配置');
-    this.managementAccountText = this.managementAuthenticated ? '已登录' : '未登录';
     switch (this.state.coreState) {
       case 'vpn_ready':
         this.virtualNetworkText = '已就绪';
@@ -52,23 +50,9 @@ export struct ConfigurationOverview {
       }.width('100%').padding({ top: 8, bottom: 8 })
       Divider().color($r('app.color.divider'))
       Row() {
-        Text('VPN 授权').fontSize(14).fontColor($r('app.color.text_secondary'))
-        Blank()
-        Text('启动时请求').fontSize(14).fontColor($r('app.color.text_primary'))
-          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.width('100%').padding({ top: 8, bottom: 8 })
-      Divider().color($r('app.color.divider'))
-      Row() {
         Text('虚拟网络').fontSize(14).fontColor($r('app.color.text_secondary'))
         Blank()
         Text(this.virtualNetworkText).fontSize(14).fontColor($r('app.color.text_primary'))
-          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.width('100%').padding({ top: 8, bottom: 8 })
-      Divider().color($r('app.color.divider'))
-      Row() {
-        Text('管理账号').fontSize(14).fontColor($r('app.color.text_secondary'))
-        Blank()
-        Text(this.managementAccountText).fontSize(14).fontColor($r('app.color.text_primary'))
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.width('100%').padding({ top: 8, bottom: 8 })
     }

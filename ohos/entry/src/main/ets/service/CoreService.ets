@@ -156,9 +156,19 @@ export class CoreService {
     await this.pictureInPicture.stopForForeground();
     if (!this.runtimeStateStore.isDesiredRunning()) {
       this.removeFile(CORE_CHECK_REQUEST_FILE);
+      const inactiveStatus = this.readStatus();
+      if (inactiveStatus.state === 'failed' || inactiveStatus.state === 'recovery_exhausted') {
+        this.writeStatus('not_started', '核心尚未启动');
+      }
       return;
     }
     const foregroundStatus = this.readStatus();
+    if (foregroundStatus.state === 'failed' || foregroundStatus.state === 'recovery_exhausted') {
+      this.runtimeStateStore.setDesiredRunning(false);
+      this.removeFile(CORE_CHECK_REQUEST_FILE);
+      this.writeStatus('not_started', '核心尚未启动');
+      return;
+    }
     this.writeText(CORE_CHECK_REQUEST_FILE, String(Date.now()));
     // The VPN extension polls this file every 250 ms. If the request remains,
     // its process and watchdog are no longer alive, regardless of a fresh
@@ -214,6 +224,7 @@ export class CoreService {
       });
     } catch (error) {
       const detail = this.formatError(error);
+      this.runtimeStateStore.setDesiredRunning(false);
       this.writeStatus('failed', detail);
       throw new Error(`无法启动 VPN 扩展：${detail}`);
     }
@@ -221,6 +232,7 @@ export class CoreService {
     const coreReady = await this.waitForCoreReady();
     if (!coreReady) {
       const status = this.readStatus();
+      this.runtimeStateStore.setDesiredRunning(false);
       throw new Error(status.message.length > 0 ? status.message : '等待 OpenP2P 核心启动超时');
     }
 

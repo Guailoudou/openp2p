@@ -2,6 +2,7 @@ import { bundleManager } from '@kit.AbilityKit';
 
 @Component
 export struct AboutPage {
+  @Consume private themeColor: string;
   @State private appVersion: string = '未知';
 
   aboutToAppear(): void {
@@ -19,7 +20,7 @@ export struct AboutPage {
     Row({ space: 14 }) {
       SymbolGlyph(icon)
         .fontSize(18)
-        .fontColor([$r('app.color.accent')])
+        .fontColor([this.themeColor])
       Text(label)
         .fontSize(15)
         .fontColor($r('app.color.text_secondary'))
@@ -38,13 +39,13 @@ export struct AboutPage {
     Row({ space: 14 }) {
       SymbolGlyph($r('sys.symbol.link'))
         .fontSize(18)
-        .fontColor([$r('app.color.accent')])
+        .fontColor([this.themeColor])
       Text('软件开源')
         .fontSize(15)
         .fontColor($r('app.color.text_secondary'))
         .layoutWeight(1)
       Hyperlink('https://github.com/openp2p-cn/openp2p', 'OpenP2P')
-        .color($r('app.color.accent'))
+        .color(this.themeColor)
     }
     .width('100%')
     .padding({ top: 16, bottom: 16, left: 18, right: 18 })
@@ -100,10 +101,13 @@ export struct AboutPage {
           .borderRadius(16)
       }
       .width('100%')
+      .justifyContent(FlexAlign.Start)
+      .alignItems(HorizontalAlign.Start)
       .padding({ left: 20, right: 20, top: 12, bottom: 32 })
     }
     .width('100%')
     .height('100%')
+    .align(Alignment.Top)
     .nestedScroll({
       scrollForward: NestedScrollMode.PARENT_FIRST,
       scrollBackward: NestedScrollMode.SELF_FIRST

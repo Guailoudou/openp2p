@@ -1,13 +1,16 @@
-import { PageHeader } from '../components/PageHeader';
 import { AboutPage } from './AboutPage';
 import { RegistrationForm } from '../components/RegistrationForm';
+import { AppColorMode } from '../service/RuntimeStateStore';
 
 @Component
 export struct ProfilePage {
+  @Consume private themeColor: string;
+  @Consume private themeSoftColor: string;
   @State private showAbout: boolean = false;
   @State private showManagementAccount: boolean = false;
   @State private registrationMode: boolean = false;
   @State private showBackgroundSettings: boolean = false;
+  @State private showAppearanceSettings: boolean = false;
   @State private aboutPressed: boolean = false;
   @State private accountInput: string = '';
   @State private passwordInput: string = '';
@@ -29,6 +32,7 @@ export struct ProfilePage {
   @Prop simulatedLocationEnabled: boolean = false;
   @Prop simulatedDownloadEnabled: boolean = false;
   @Prop pictureInPictureEnabled: boolean = false;
+  @Prop colorMode: string = AppColorMode.SYSTEM;
   onSaveManagementCredentials: (username: string, password: string) => Promise<boolean> =
     async (_username: string, _password: string): Promise<boolean> => false;
   onRegisterManagementAccount: (username: string, password: string, phone: string, email: string) => Promise<boolean> =
@@ -42,6 +46,9 @@ export struct ProfilePage {
     async (_enabled: boolean): Promise<boolean> => false;
   onPictureInPictureChange: (enabled: boolean) => Promise<boolean> =
     async (_enabled: boolean): Promise<boolean> => false;
+  onThemeColorChange: (color: string) => void = (_color: string): void => {};
+  onColorModeChange: (mode: string) => void = (_mode: string): void => {};
+  private themeColors: string[] = ['#0A59F7', '#7C3AED', '#009A9A', '#22A447', '#E76F00', '#D9485F'];
 
   aboutToAppear(): void {
     this.syncBackgroundSettingState();
@@ -129,7 +136,7 @@ export struct ProfilePage {
         Row({ space: 14 }) {
           this.backgroundSettingLabel($r('sys.symbol.lock_fill'), '持续后台任务', '使用系统长时任务维持连接')
           Toggle({ type: ToggleType.Switch, isOn: $$this.localBackgroundKeepAliveEnabled })
-            .selectedColor($r('app.color.accent'))
+            .selectedColor(this.themeColor)
             .enabled(!this.savingBackgroundSetting)
             .onChange((enabled: boolean): void => {
             this.changeBackgroundKeepAlive(enabled);
@@ -140,7 +147,7 @@ export struct ProfilePage {
         Row({ space: 14 }) {
           this.backgroundSettingLabel($r('sys.symbol.compass_circle'), '模拟定位', '使用低功耗后台定位模式')
           Toggle({ type: ToggleType.Switch, isOn: $$this.localSimulatedLocationEnabled })
-            .selectedColor($r('app.color.accent'))
+            .selectedColor(this.themeColor)
             .enabled(!this.savingBackgroundSetting)
             .onChange((enabled: boolean): void => {
             this.changeSimulatedLocation(enabled);
@@ -151,7 +158,7 @@ export struct ProfilePage {
         Row({ space: 14 }) {
           this.backgroundSettingLabel($r('sys.symbol.circle_and_arrow_down'), '模拟下载', '使用数据传输实况通知')
           Toggle({ type: ToggleType.Switch, isOn: $$this.localSimulatedDownloadEnabled })
-            .selectedColor($r('app.color.accent'))
+            .selectedColor(this.themeColor)
             .enabled(!this.savingBackgroundSetting)
             .onChange((enabled: boolean): void => {
             this.changeSimulatedDownload(enabled);
@@ -162,7 +169,7 @@ export struct ProfilePage {
         Row({ space: 14 }) {
           this.backgroundSettingLabel($r('sys.symbol.media_center'), '画中画', '进入后台时显示运行小窗')
           Toggle({ type: ToggleType.Switch, isOn: $$this.localPictureInPictureEnabled })
-            .selectedColor($r('app.color.accent'))
+            .selectedColor(this.themeColor)
             .enabled(!this.savingBackgroundSetting)
             .onChange((enabled: boolean): void => {
             this.changePictureInPicture(enabled);
@@ -171,10 +178,13 @@ export struct ProfilePage {
         .width('100%').padding(16).backgroundColor($r('app.color.card_background')).borderRadius(16)
       }
       .width('100%')
+      .justifyContent(FlexAlign.Start)
+      .alignItems(HorizontalAlign.Start)
       .padding({ left: 20, right: 20, top: 8, bottom: 32 })
     }
     .width('100%')
     .height('100%')
+    .align(Alignment.Top)
   }
 
   @Builder
@@ -182,11 +192,11 @@ export struct ProfilePage {
     Row() {
       SymbolGlyph(icon)
         .fontSize(22)
-        .fontColor([$r('app.color.accent')])
+        .fontColor([this.themeColor])
     }
     .width(42)
     .height(42)
-    .backgroundColor($r('app.color.accent_soft'))
+    .backgroundColor(this.themeSoftColor)
     .borderRadius(12)
     .justifyContent(FlexAlign.Center)
 
@@ -201,6 +211,99 @@ export struct ProfilePage {
     }
     .layoutWeight(1)
     .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private colorModeOption(mode: string, title: string, subtitle: string) {
+    Row({ space: 12 }) {
+      Column({ space: 3 }) {
+        Text(title)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+        Text(subtitle)
+          .fontSize(13)
+          .fontColor($r('app.color.text_secondary'))
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      if (this.colorMode === mode) {
+        SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+          .fontSize(22)
+          .fontColor([this.themeColor])
+      }
+    }
+    .width('100%')
+    .padding({ left: 2, right: 2, top: 10, bottom: 10 })
+    .onClick((): void => this.onColorModeChange(mode))
+  }
+
+  @Builder
+  private appearanceSettingsSheet() {
+    Scroll() {
+      Column({ space: 18 }) {
+        Column({ space: 2 }) {
+          Text('深色模式')
+            .width('100%')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.text_primary'))
+          this.colorModeOption(AppColorMode.SYSTEM, '跟随系统', '随系统深浅色设置自动切换')
+          this.colorModeOption(AppColorMode.DARK, '始终深色', '始终使用深色界面')
+          this.colorModeOption(AppColorMode.LIGHT, '始终浅色', '始终使用浅色界面')
+        }
+        .width('100%')
+        .padding(18)
+        .backgroundColor($r('app.color.card_background'))
+        .borderRadius(16)
+
+        Column({ space: 14 }) {
+          Text('主题色')
+            .width('100%')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.text_primary'))
+          Text('选择后立即替换应用的品牌强调色')
+            .width('100%')
+            .fontSize(13)
+            .fontColor($r('app.color.text_secondary'))
+          Row({ space: 12 }) {
+            ForEach(this.themeColors, (color: string) => {
+              Button() {
+                if (this.themeColor === color) {
+                  SymbolGlyph($r('sys.symbol.checkmark'))
+                    .fontSize(20)
+                    .fontColor([Color.White])
+                }
+              }
+              .width(44)
+              .height(44)
+              .type(ButtonType.Circle)
+              .backgroundColor(color)
+              .border({
+                width: this.themeColor === color ? 3 : 0,
+                color: $r('app.color.card_background')
+              })
+              .onClick((): void => this.onThemeColorChange(color))
+            }, (color: string): string => color)
+          }
+          .width('100%')
+          .justifyContent(FlexAlign.SpaceBetween)
+        }
+        .width('100%')
+        .padding(18)
+        .backgroundColor($r('app.color.card_background'))
+        .borderRadius(16)
+
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Start)
+      .alignItems(HorizontalAlign.Start)
+      .padding({ left: 20, right: 20, top: 8, bottom: 32 })
+    }
+    .width('100%')
+    .height('100%')
+    .align(Alignment.Top)
   }
 
   @Builder
@@ -227,9 +330,9 @@ export struct ProfilePage {
         this.managementPhoneItem()
         this.profileItem('注册时间', this.managementAddTime.length > 0 ? this.managementAddTime : '未知')
         Row({ space: 8 }) {
-          SymbolGlyph($r('sys.symbol.lock_fill')).fontSize(16).fontColor([$r('app.color.accent')])
+          SymbolGlyph($r('sys.symbol.lock_fill')).fontSize(16).fontColor([this.themeColor])
           Text('OpenP2P Token 已自动同步并锁定')
-            .fontSize(13).fontColor($r('app.color.accent'))
+            .fontSize(13).fontColor(this.themeColor)
         }.width('100%')
         Blank().layoutWeight(1)
         Button(this.savingAccount ? '正在退出…' : '退出登录')
@@ -278,7 +381,7 @@ export struct ProfilePage {
             this.saveManagementAccount();
           })
           Button('注册账号')
-            .width('100%').height(48).fontColor($r('app.color.accent'))
+            .width('100%').height(48).fontColor(this.themeColor)
             .backgroundColor(Color.Transparent).enabled(!this.savingAccount)
             .onClick((): void => { this.registrationMode = true; })
         }
@@ -442,18 +545,16 @@ export struct ProfilePage {
   build() {
     Scroll() {
       Column({ space: 18 }) {
-        PageHeader({ title: '我的', subtitle: '应用设置与信息' })
-
         Column({ space: 12 }) {
           Row({ space: 14 }) {
             Row() {
               SymbolGlyph($r('sys.symbol.person_fill'))
                 .fontSize(24)
-                .fontColor([$r('app.color.accent')])
+                .fontColor([this.themeColor])
             }
             .width(44)
             .height(44)
-            .backgroundColor($r('app.color.accent_soft'))
+            .backgroundColor(this.themeSoftColor)
             .borderRadius(12)
             .justifyContent(FlexAlign.Center)
 
@@ -499,11 +600,11 @@ export struct ProfilePage {
             Row() {
               SymbolGlyph($r('sys.symbol.lock_fill'))
                 .fontSize(24)
-                .fontColor([$r('app.color.accent')])
+                .fontColor([this.themeColor])
             }
             .width(44)
             .height(44)
-            .backgroundColor($r('app.color.accent_soft'))
+            .backgroundColor(this.themeSoftColor)
             .borderRadius(12)
             .justifyContent(FlexAlign.Center)
 
@@ -541,13 +642,56 @@ export struct ProfilePage {
 
           Row({ space: 14 }) {
             Row() {
-              SymbolGlyph($r('sys.symbol.info_circle_fill'))
+              SymbolGlyph($r('sys.symbol.gearshape_fill'))
                 .fontSize(24)
-                .fontColor([$r('app.color.accent')])
+                .fontColor([this.themeColor])
             }
             .width(44)
             .height(44)
-            .backgroundColor($r('app.color.accent_soft'))
+            .backgroundColor(this.themeSoftColor)
+            .borderRadius(12)
+            .justifyContent(FlexAlign.Center)
+
+            Column({ space: 3 }) {
+              Text('外观设置')
+                .fontSize(17)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_primary'))
+              Text('主题色与深浅模式')
+                .fontSize(13)
+                .fontColor($r('app.color.text_secondary'))
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .fontSize(18)
+              .fontColor([$r('app.color.text_tertiary')])
+          }
+          .width('100%')
+          .padding(18)
+          .backgroundColor($r('app.color.card_background'))
+          .borderRadius(16)
+          .shadow({ radius: 16, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 6 })
+          .onClick((): void => {
+            this.showAppearanceSettings = true;
+          })
+          .bindSheet($$this.showAppearanceSettings, this.appearanceSettingsSheet(), {
+            height: SheetSize.MEDIUM,
+            dragBar: true,
+            preferType: SheetType.BOTTOM,
+            title: { title: '外观设置' }
+          })
+
+          Row({ space: 14 }) {
+            Row() {
+              SymbolGlyph($r('sys.symbol.info_circle_fill'))
+                .fontSize(24)
+                .fontColor([this.themeColor])
+            }
+            .width(44)
+            .height(44)
+            .backgroundColor(this.themeSoftColor)
             .borderRadius(12)
             .justifyContent(FlexAlign.Center)
 
@@ -587,10 +731,13 @@ export struct ProfilePage {
         }
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 24, bottom: 128 })
+      .justifyContent(FlexAlign.Start)
+      .alignItems(HorizontalAlign.Start)
+      .padding({ left: 20, right: 20, top: 8, bottom: 32 })
     }
     .width('100%')
     .height('100%')
+    .align(Alignment.Top)
     .backgroundColor($r('app.color.page_background'))
     .bindSheet($$this.showAbout, this.aboutSheet(), {
       height: SheetSize.LARGE,

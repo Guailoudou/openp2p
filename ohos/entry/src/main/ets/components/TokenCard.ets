@@ -2,6 +2,8 @@ import { CoreUiState } from '../model/CoreUiState';
 
 @Component
 export struct TokenCard {
+  @Consume private themeColor: string;
+  @Consume private themeSoftColor: string;
   @ObjectLink state: CoreUiState;
   onSave: () => void = (): void => {};
 
@@ -10,7 +12,7 @@ export struct TokenCard {
       Row({ space: 8 }) {
         SymbolGlyph($r('sys.symbol.key_fill'))
           .fontSize(20)
-          .fontColor([$r('app.color.accent')])
+          .fontColor([this.themeColor])
         Text('Token')
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
@@ -25,10 +27,10 @@ export struct TokenCard {
         Row({ space: 6 }) {
           SymbolGlyph($r('sys.symbol.lock_fill'))
             .fontSize(15)
-            .fontColor([$r('app.color.accent')])
+            .fontColor([this.themeColor])
           Text('Token 已因管理账号登录而锁定')
             .fontSize(13)
-            .fontColor($r('app.color.accent'))
+            .fontColor(this.themeColor)
         }
         .width('100%')
       }
@@ -60,7 +62,7 @@ export struct TokenCard {
         Button() {
           SymbolGlyph($r(this.state.tokenVisible ? 'sys.symbol.eye_slash' : 'sys.symbol.eye'))
             .fontSize(20)
-            .fontColor([$r('app.color.accent')])
+            .fontColor([this.themeColor])
         }
         .type(ButtonType.Circle)
         .width(36)
@@ -79,8 +81,8 @@ export struct TokenCard {
         .height(48)
         .fontSize(15)
         .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.accent'))
-        .backgroundColor($r('app.color.accent_soft'))
+        .fontColor(this.themeColor)
+        .backgroundColor(this.themeSoftColor)
         .borderRadius(14)
         .enabled(!this.state.tokenLocked && !this.state.running && !this.state.busy)
         .onClick((): void => this.onSave())
