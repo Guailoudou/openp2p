@@ -66,7 +66,18 @@ export struct LogsPage {
   }
 
   build() {
-    Column({ space: 16 }) {
+    GridRow({
+      columns: { xs: 4, sm: 8, md: 12, lg: 12, xl: 12 },
+      breakpoints: {
+        value: ['600vp', '840vp', '1200vp', '1600vp'],
+        reference: BreakpointsReference.WindowSize
+      }
+    }) {
+      GridCol({
+        span: { xs: 4, sm: 8, md: 10, lg: 10, xl: 8 },
+        offset: { xs: 0, sm: 0, md: 1, lg: 1, xl: 2 }
+      }) {
+        Column({ space: 16 }) {
       Row({ space: 12 }) {
         Row() {
           PageHeader({ title: '日志', subtitle: '实时查看 OpenP2P 核心输出' })
@@ -118,12 +129,16 @@ export struct LogsPage {
         .edgeEffect(EdgeEffect.Spring)
         .shadow({ radius: 12, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 4 })
       }
+        }
+        .width('100%')
+        .height('100%')
+        .justifyContent(FlexAlign.Start)
+        .alignItems(HorizontalAlign.Start)
+        .padding({ left: 20, right: 20, top: 24, bottom: 24 })
+      }
+      .height('100%')
     }
-    .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Start)
-    .alignItems(HorizontalAlign.Start)
-    .padding({ left: 20, right: 20, top: 24, bottom: 24 })
+    .width('100%').height('100%')
     .backgroundColor($r('app.color.page_background'))
   }
 }

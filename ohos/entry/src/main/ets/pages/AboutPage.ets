@@ -101,6 +101,7 @@ export struct AboutPage {
           .borderRadius(16)
       }
       .width('100%')
+      .constraintSize({ maxWidth: 760 })
       .justifyContent(FlexAlign.Start)
       .alignItems(HorizontalAlign.Start)
       .padding({ left: 20, right: 20, top: 12, bottom: 32 })

@@ -614,6 +614,7 @@ export struct DevicePage {
       Row() {
         Text('强制使用 IPv6').layoutWeight(1).fontColor($r('app.color.text_primary'))
         Toggle({ type: ToggleType.Switch, isOn: this.editForceIpv6 })
+          .selectedColor(this.themeColor)
           .onChange((value: boolean): void => { this.editForceIpv6 = value; })
       }.width('100%')
       Button('保存').width('100%').height(48).onClick((): void => { this.saveDevice(); })
@@ -641,6 +642,7 @@ export struct DevicePage {
                       .fontSize(13).fontColor($r('app.color.text_secondary'))
                   }.layoutWeight(1).alignItems(HorizontalAlign.Start)
                   Toggle({ type: ToggleType.Switch, isOn: mapping.enabled === 1 })
+                    .selectedColor(this.themeColor)
                     .onChange((): void => { this.toggleMapping(index); })
                 }.width('100%')
                 Row({ space: 8 }) {
@@ -689,6 +691,8 @@ export struct DevicePage {
               .width('100%').height(48)
               .selected(this.mappingProtocol === 'tcp' ? 0 : 1)
               .value(this.mappingProtocol === 'tcp' ? 'TCP' : 'UDP')
+              .selectedOptionBgColor(this.themeSoftColor)
+              .selectedOptionFontColor(this.themeColor)
               .onSelect((index: number): void => { this.mappingProtocol = index === 0 ? 'tcp' : 'udp'; })
           }.width(112).alignItems(HorizontalAlign.Start)
           Column({ space: 6 }) {
@@ -739,6 +743,8 @@ export struct DevicePage {
               .width('100%').height(48)
               .selected(this.mappingPunchPriority)
               .value(this.punchPriorityLabel(this.mappingPunchPriority))
+              .selectedOptionBgColor(this.themeSoftColor)
+              .selectedOptionFontColor(this.themeColor)
               .onSelect((index: number): void => { this.mappingPunchPriority = index; })
           }.layoutWeight(1).alignItems(HorizontalAlign.Start)
           Button('检测远端服务').layoutWeight(1).height(48).onClick((): void => { this.checkRemote(); })
@@ -788,6 +794,7 @@ export struct DevicePage {
       }
     }
     .width('100%').height(this.sheetMode === 'mappings' || this.sheetMode === 'editMapping' ? '100%' : undefined)
+    .constraintSize({ maxWidth: this.sheetMode === 'mappings' || this.sheetMode === 'editMapping' ? 1000 : 640 })
     .justifyContent(FlexAlign.Start).alignItems(HorizontalAlign.Start)
     .padding({ left: 20, right: 20, top: 12, bottom: 32 })
   }
@@ -795,7 +802,18 @@ export struct DevicePage {
   build() {
     Refresh({ refreshing: $$this.refreshing }) {
       Scroll(this.scrollController) {
-        Column({ space: 16 }) {
+        GridRow({
+          columns: { xs: 4, sm: 8, md: 12, lg: 12, xl: 12 },
+          breakpoints: {
+            value: ['600vp', '840vp', '1200vp', '1600vp'],
+            reference: BreakpointsReference.WindowSize
+          }
+        }) {
+          GridCol({
+            span: { xs: 4, sm: 8, md: 10, lg: 10, xl: 8 },
+            offset: { xs: 0, sm: 0, md: 1, lg: 1, xl: 2 }
+          }) {
+            Column({ space: 16 }) {
           PageHeader({ title: '设备', subtitle: '管理 OpenP2P 设备与端口映射' })
           if (this.message.length > 0) {
             Text(this.message)
@@ -806,9 +824,18 @@ export struct DevicePage {
             LoadingProgress().width(42).height(42).margin({ top: 48 })
           } else if (this.devices.length === 0) {
             Text('暂无设备').fontSize(16).fontColor($r('app.color.text_secondary')).padding(48)
-           } else {
-             ForEach(this.devices, (device: ManagementDevice) => {
-               List() {
+          } else {
+            GridRow({
+              columns: { xs: 1, sm: 1, md: 2, lg: 2, xl: 2 },
+              gutter: { x: 16, y: 16 },
+              breakpoints: {
+                value: ['600vp', '840vp', '1200vp', '1600vp'],
+                reference: BreakpointsReference.WindowSize
+              }
+            }) {
+              ForEach(this.devices, (device: ManagementDevice) => {
+                GridCol({ span: 1 }) {
+                  List() {
                  ListItem() {
                    Column({ space: 12 }) {
                      Row() {
@@ -848,14 +875,20 @@ export struct DevicePage {
                  })
                  .onClick((): void => { this.handleDeviceMenuAction(device, 'mappings'); })
                  .bindContextMenu(this.deviceContextMenu(device), ResponseType.LongPress)
-               }
-               .width('100%').height(124).scrollBar(BarState.Off).edgeEffect(EdgeEffect.None)
-             }, (device: ManagementDevice): string => this.deviceCardKey(device))
+                  }
+                  .width('100%').height(124).scrollBar(BarState.Off).edgeEffect(EdgeEffect.None)
+                }
+              }, (device: ManagementDevice): string => this.deviceCardKey(device))
+            }
+            .width('100%')
+          }
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.Start).alignItems(HorizontalAlign.Start)
+            .padding({ left: 20, right: 20, top: 24, bottom: 128 })
           }
         }
         .width('100%')
-        .justifyContent(FlexAlign.Start).alignItems(HorizontalAlign.Start)
-        .padding({ left: 20, right: 20, top: 24, bottom: 128 })
       }
       .width('100%').height('100%')
       .align(Alignment.Top)

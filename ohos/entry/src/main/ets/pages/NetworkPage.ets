@@ -241,6 +241,15 @@ export struct NetworkPage {
       selected: selected,
       value: names[selected],
       canLoop: false,
+      selectedTextStyle: {
+        color: this.themeColor,
+        font: { weight: FontWeight.Medium }
+      },
+      selectedBackgroundStyle: {
+        color: this.themeSoftColor,
+        borderRadius: { topLeft: 12, topRight: 12, bottomLeft: 12, bottomRight: 12 }
+      },
+      acceptButtonStyle: { fontColor: this.themeColor },
       onAccept: (result: TextPickerResult): void => {
         const value = result.value;
         if (typeof value === 'string') {
@@ -463,13 +472,14 @@ export struct NetworkPage {
         Row() {
           Text(this.config.centralNode.length > 0 ? this.config.centralNode : '不指定')
             .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-            .textAlign(TextAlign.Start).fontColor($r('app.color.text_primary'))
+            .textAlign(TextAlign.Start)
+            .fontColor(this.config.centralNode.length > 0 ? this.themeColor : $r('app.color.text_primary'))
           SymbolGlyph($r('sys.symbol.chevron_right'))
-            .fontSize(18).fontColor([$r('app.color.text_secondary')])
+            .fontSize(18).fontColor([this.themeColor])
         }.width('100%')
       }
       .width(180).height(48).padding({ left: 20, right: 16 })
-      .backgroundColor($r('app.color.page_background'))
+      .backgroundColor(this.config.centralNode.length > 0 ? this.themeSoftColor : $r('app.color.page_background'))
       .onClick((): void => { this.showNodePicker(); })
     }.width('100%').alignItems(VerticalAlign.Center)
   }
@@ -507,6 +517,7 @@ export struct NetworkPage {
         Button('保存成员设置').width('100%').height(48).onClick((): void => { this.saveMember(); })
       }
       .width('100%')
+      .constraintSize({ maxWidth: 640 })
       .padding({ left: 20, right: 20, top: 12, bottom: 32 })
       .justifyContent(FlexAlign.Start)
       .alignItems(HorizontalAlign.Start)
@@ -523,14 +534,34 @@ export struct NetworkPage {
   build() {
     Refresh({ refreshing: $$this.refreshing }) {
       Scroll(this.scrollController) {
-        Column({ space: 16 }) {
+        GridRow({
+          columns: { xs: 4, sm: 8, md: 12, lg: 12, xl: 12 },
+          breakpoints: {
+            value: ['600vp', '840vp', '1200vp', '1600vp'],
+            reference: BreakpointsReference.WindowSize
+          }
+        }) {
+          GridCol({
+            span: { xs: 4, sm: 8, md: 10, lg: 10, xl: 8 },
+            offset: { xs: 0, sm: 0, md: 1, lg: 1, xl: 2 }
+          }) {
+            Column({ space: 16 }) {
           PageHeader({ title: '网络', subtitle: '管理 SD-WAN 网关、模式与成员' })
         if (this.message.length > 0) {
           Text(this.message)
             .width('100%').padding(14).fontSize(14).fontColor($r('app.color.text_secondary'))
             .backgroundColor($r('app.color.card_background')).borderRadius(14)
         }
-        Column({ space: 14 }) {
+        GridRow({
+          columns: { xs: 1, sm: 1, md: 2, lg: 2, xl: 2 },
+          gutter: { x: 16, y: 16 },
+          breakpoints: {
+            value: ['600vp', '840vp', '1200vp', '1600vp'],
+            reference: BreakpointsReference.WindowSize
+          }
+        }) {
+          GridCol({ span: 1 }) {
+            Column({ space: 14 }) {
           Text('组网设置').width('100%').fontSize(18).fontWeight(FontWeight.Medium)
           TextInput({ text: this.config.gateway, placeholder: '网关，例如 10.0.0.0/24' })
             .onChange((value: string): void => { this.updateGateway(value); })
@@ -540,6 +571,7 @@ export struct NetworkPage {
             Row() {
               Text('强制中继').layoutWeight(1).fontColor($r('app.color.text_primary'))
               Toggle({ type: ToggleType.Switch, isOn: this.config.forceRelay === 1 })
+                .selectedColor(this.themeColor)
                 .onChange((value: boolean): void => {
                   this.config.forceRelay = value ? 1 : 0;
                   this.refreshConfig();
@@ -552,12 +584,16 @@ export struct NetworkPage {
               .width(180)
               .selected(this.config.punchPriority)
               .value(this.punchPriorityLabel(this.config.punchPriority))
+              .selectedOptionBgColor(this.themeSoftColor)
+              .selectedOptionFontColor(this.themeColor)
               .onSelect((index: number): void => { this.config.punchPriority = index; this.refreshConfig(); })
           }.width('100%').alignItems(VerticalAlign.Center)
-        }
-        .width('100%').padding(18).backgroundColor($r('app.color.card_background')).borderRadius(18)
+            }
+            .width('100%').padding(18).backgroundColor($r('app.color.card_background')).borderRadius(18)
+          }
 
-        Column({ space: 12 }) {
+          GridCol({ span: 1 }) {
+            Column({ space: 12 }) {
           Text('网络成员').width('100%').fontSize(18).fontWeight(FontWeight.Medium)
           if (this.config.Nodes.length === 0) {
             Text('暂无成员').fontSize(14).fontColor($r('app.color.text_secondary')).padding(18)
@@ -597,8 +633,11 @@ export struct NetworkPage {
             .width('100%').height(this.config.Nodes.length * 72)
             .scrollBar(BarState.Off).edgeEffect(EdgeEffect.None)
           }
+            }
+            .width('100%').padding(18).backgroundColor($r('app.color.card_background')).borderRadius(18)
+          }
         }
-        .width('100%').padding(18).backgroundColor($r('app.color.card_background')).borderRadius(18)
+        .width('100%')
 
         if (this.availableDevices().length > 0) {
           Column({ space: 10 }) {
@@ -612,10 +651,13 @@ export struct NetworkPage {
 
         Button(this.loading ? '正在保存…' : '保存网络配置')
           .width('100%').height(50).enabled(!this.loading).onClick((): void => { this.saveNetwork(); })
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.Start).alignItems(HorizontalAlign.Start)
+            .padding({ left: 20, right: 20, top: 24, bottom: 128 })
+          }
         }
         .width('100%')
-        .justifyContent(FlexAlign.Start).alignItems(HorizontalAlign.Start)
-        .padding({ left: 20, right: 20, top: 24, bottom: 128 })
       }
       .width('100%').height('100%')
       .align(Alignment.Top)

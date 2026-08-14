@@ -93,8 +93,9 @@ export struct RegistrationForm {
           .width('100%').height(48).enabled(!this.registering)
           .onClick((): void => { this.submit(); })
       }
-      .width('100%').padding({ left: 20, right: 20, top: 8, bottom: 32 })
+      .width('100%').constraintSize({ maxWidth: 640 })
+      .padding({ left: 20, right: 20, top: 8, bottom: 32 })
     }
-    .width('100%').height('100%')
+    .width('100%').height('100%').align(Alignment.Top)
   }
 }

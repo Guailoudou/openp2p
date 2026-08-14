@@ -57,7 +57,8 @@ export struct HomePage {
           .backgroundColor(Color.Transparent).enabled(!this.savingAccount)
           .onClick((): void => { this.registrationMode = true; })
       }
-      .width('100%').height('100%').padding({ left: 20, right: 20, top: 16, bottom: 32 })
+      .width('100%').height('100%').constraintSize({ maxWidth: 640 })
+      .padding({ left: 20, right: 20, top: 16, bottom: 32 })
     }
   }
 
@@ -92,50 +93,81 @@ export struct HomePage {
 
   build() {
     Scroll(this.scrollController) {
-      Column({ space: 18 }) {
-        Row({ space: 12 }) {
-          Row() {
-            PageHeader({ title: 'OpenP2P', subtitle: '安全、轻量的点对点连接' })
-          }
-          .layoutWeight(1)
+      GridRow({
+        columns: { xs: 4, sm: 8, md: 12, lg: 12, xl: 12 },
+        breakpoints: { value: ['600vp', '840vp', '1200vp', '1600vp'], reference: BreakpointsReference.WindowSize }
+      }) {
+        GridCol({
+          span: { xs: 4, sm: 8, md: 10, lg: 10, xl: 8 },
+          offset: { xs: 0, sm: 0, md: 1, lg: 1, xl: 2 }
+        }) {
+          Column({ space: 18 }) {
+            Row({ space: 12 }) {
+              Row() {
+                PageHeader({ title: 'OpenP2P', subtitle: '安全、轻量的点对点连接' })
+              }
+              .layoutWeight(1)
 
-          Button() {
-            SymbolGlyph($r('sys.symbol.gearshape_fill'))
-              .fontSize(22)
-              .fontColor([$r('app.color.text_primary')])
+              Button() {
+                SymbolGlyph($r('sys.symbol.gearshape_fill'))
+                  .fontSize(22)
+                  .fontColor([$r('app.color.text_primary')])
+              }
+              .width(44)
+              .height(44)
+              .type(ButtonType.Circle)
+              .backgroundColor($r('app.color.card_background'))
+              .shadow({ radius: 10, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 4 })
+              .accessibilityText('设置')
+              .onClick((): void => {
+                this.onOpenSettings();
+              })
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Top)
+
+            GridRow({
+              columns: { xs: 1, sm: 1, md: 2, lg: 2, xl: 2 },
+              gutter: { x: 18, y: 18 },
+              breakpoints: {
+                value: ['600vp', '840vp', '1200vp', '1600vp'],
+                reference: BreakpointsReference.WindowSize
+              }
+            }) {
+              GridCol({ span: 1 }) {
+                StatusCard({ state: this.state })
+              }
+              GridCol({ span: 1 }) {
+                ConfigurationOverview({ state: this.state,
+                  managementAuthenticated: this.managementAuthenticated })
+              }
+              if (!this.managementAuthenticated) {
+                GridCol({ span: { xs: 1, sm: 1, md: 2, lg: 2, xl: 2 } }) {
+                  TokenCard({ state: this.state, onSave: this.onSaveToken })
+                }
+                GridCol({ span: { xs: 1, sm: 1, md: 2, lg: 2, xl: 2 } }) {
+                  Button('登录管理账号')
+                    .width('100%').height(48).fontColor(this.themeColor)
+                    .backgroundColor(this.themeSoftColor).borderRadius(14)
+                    .onClick((): void => {
+                      this.accountInput = this.managementUsername;
+                      this.passwordInput = '';
+                      this.accountMessage = '';
+                      this.registrationMode = false;
+                      this.showManagementAccount = true;
+                    })
+                }
+              }
+            }
+            .width('100%')
           }
-          .width(44)
-          .height(44)
-          .type(ButtonType.Circle)
-          .backgroundColor($r('app.color.card_background'))
-          .shadow({ radius: 10, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 4 })
-          .accessibilityText('设置')
-          .onClick((): void => {
-            this.onOpenSettings();
-          })
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Top)
-        StatusCard({ state: this.state })
-        ConfigurationOverview({ state: this.state, managementAuthenticated: this.managementAuthenticated })
-        if (!this.managementAuthenticated) {
-          TokenCard({ state: this.state, onSave: this.onSaveToken })
-          Button('登录管理账号')
-            .width('100%').height(48).fontColor(this.themeColor)
-            .backgroundColor(this.themeSoftColor).borderRadius(14)
-            .onClick((): void => {
-              this.accountInput = this.managementUsername;
-              this.passwordInput = '';
-              this.accountMessage = '';
-              this.registrationMode = false;
-              this.showManagementAccount = true;
-            })
+          .width('100%')
+          .justifyContent(FlexAlign.Start)
+          .alignItems(HorizontalAlign.Start)
+          .padding({ left: 20, right: 20, top: 24, bottom: 128 })
         }
       }
       .width('100%')
-      .justifyContent(FlexAlign.Start)
-      .alignItems(HorizontalAlign.Start)
-      .padding({ left: 20, right: 20, top: 24, bottom: 128 })
     }
     .width('100%')
     .height('100%')

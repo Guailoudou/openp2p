@@ -178,6 +178,7 @@ export struct ProfilePage {
         .width('100%').padding(16).backgroundColor($r('app.color.card_background')).borderRadius(16)
       }
       .width('100%')
+      .constraintSize({ maxWidth: 760 })
       .justifyContent(FlexAlign.Start)
       .alignItems(HorizontalAlign.Start)
       .padding({ left: 20, right: 20, top: 8, bottom: 32 })
@@ -214,19 +215,13 @@ export struct ProfilePage {
   }
 
   @Builder
-  private colorModeOption(mode: string, title: string, subtitle: string) {
+  private colorModeOption(mode: string, title: string) {
     Row({ space: 12 }) {
-      Column({ space: 3 }) {
-        Text(title)
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
-        Text(subtitle)
-          .fontSize(13)
-          .fontColor($r('app.color.text_secondary'))
-      }
+      Text(title)
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_primary'))
       .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
       if (this.colorMode === mode) {
         SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
           .fontSize(22)
@@ -248,9 +243,9 @@ export struct ProfilePage {
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.text_primary'))
-          this.colorModeOption(AppColorMode.SYSTEM, '跟随系统', '随系统深浅色设置自动切换')
-          this.colorModeOption(AppColorMode.DARK, '始终深色', '始终使用深色界面')
-          this.colorModeOption(AppColorMode.LIGHT, '始终浅色', '始终使用浅色界面')
+          this.colorModeOption(AppColorMode.SYSTEM, '跟随系统')
+          this.colorModeOption(AppColorMode.DARK, '始终深色')
+          this.colorModeOption(AppColorMode.LIGHT, '始终浅色')
         }
         .width('100%')
         .padding(18)
@@ -263,10 +258,6 @@ export struct ProfilePage {
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.text_primary'))
-          Text('选择后立即替换应用的品牌强调色')
-            .width('100%')
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
           Row({ space: 12 }) {
             ForEach(this.themeColors, (color: string) => {
               Button() {
@@ -297,6 +288,7 @@ export struct ProfilePage {
 
       }
       .width('100%')
+      .constraintSize({ maxWidth: 760 })
       .justifyContent(FlexAlign.Start)
       .alignItems(HorizontalAlign.Start)
       .padding({ left: 20, right: 20, top: 8, bottom: 32 })
@@ -387,6 +379,7 @@ export struct ProfilePage {
         }
       }
       .width('100%').height('100%')
+      .constraintSize({ maxWidth: 640 })
       .padding({ left: 20, right: 20, top: 16, bottom: 32 })
     }
   }
@@ -652,14 +645,11 @@ export struct ProfilePage {
             .borderRadius(12)
             .justifyContent(FlexAlign.Center)
 
-            Column({ space: 3 }) {
+            Column() {
               Text('外观设置')
                 .fontSize(17)
                 .fontWeight(FontWeight.Medium)
                 .fontColor($r('app.color.text_primary'))
-              Text('主题色与深浅模式')
-                .fontSize(13)
-                .fontColor($r('app.color.text_secondary'))
             }
             .layoutWeight(1)
             .alignItems(HorizontalAlign.Start)
@@ -731,6 +721,7 @@ export struct ProfilePage {
         }
       }
       .width('100%')
+      .constraintSize({ maxWidth: 760 })
       .justifyContent(FlexAlign.Start)
       .alignItems(HorizontalAlign.Start)
       .padding({ left: 20, right: 20, top: 8, bottom: 32 })
@@ -738,6 +729,10 @@ export struct ProfilePage {
     .width('100%')
     .height('100%')
     .align(Alignment.Top)
+    .nestedScroll({
+      scrollForward: NestedScrollMode.SELF_FIRST,
+      scrollBackward: NestedScrollMode.SELF_FIRST
+    })
     .backgroundColor($r('app.color.page_background'))
     .bindSheet($$this.showAbout, this.aboutSheet(), {
       height: SheetSize.LARGE,

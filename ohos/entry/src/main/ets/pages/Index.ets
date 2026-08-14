@@ -428,7 +428,7 @@ struct Index {
       .width('100%')
       .height('100%')
       .id(`openp2p-tabs-${this.managementAuthenticated}`)
-      .scrollable(false)
+      .scrollable(true)
       .barOverlap(true)
       .vertical(false)
       .barPosition(BarPosition.End)
