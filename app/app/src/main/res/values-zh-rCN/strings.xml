@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="nav_home">首页</string><string name="nav_devices">设备</string><string name="nav_network">网络</string><string name="network_subtitle">管理 SD-WAN 网关、模式与成员</string><string name="nav_logs">日志</string><string name="nav_profile">我的</string>
+    <string name="app_name">OpenP2P</string>
+    <string name="prompt_email">邮箱</string>
+    <string name="prompt_password">密码</string>
+    <string name="nav_home">首页</string><string name="nav_devices">设备</string><string name="nav_network">网络</string><string name="network_subtitle">管理 SD-WAN 网关、模式与成员</string><string name="nav_logs">日志</string>
     <string name="status_running">运行中</string><string name="status_starting">正在启动</string><string name="status_connecting">连接中</string><string name="status_recovering">恢复中</string><string name="status_stopping">正在停止</string><string name="status_stopped">已停止</string><string name="status_error">连接异常</string>
     <string name="connection_established">连接已建立</string><string name="connection_stopped_hint">准备好连接时，启动 OpenP2P。</string><string name="connection_starting_hint">正在启动 OpenP2P 核心并连接服务器…</string><string name="connection_recovering_hint">正在重新启动 OpenP2P 核心…</string><string name="connection_stopping_hint">正在安全断开连接…</string>
     <string name="start_openp2p">启动 OpenP2P</string><string name="stop_openp2p">停止 OpenP2P</string><string name="please_wait">请稍候…</string>
@@ -66,4 +69,14 @@
     <string name="username_password_minimum_error">用户名和密码不能少于 8 个字符</string>
     <string name="passwords_do_not_match">两次输入的密码不一致</string>
     <string name="agreement_required">请先阅读并同意用户协议</string>
+    <string name="settings">设置</string>
+    <string name="appearance_settings">外观设置</string>
+    <string name="about_information">查看版本和软件信息</string>
+    <string name="dark_mode">深色模式</string>
+    <string name="follow_system">跟随系统</string>
+    <string name="always_dark">始终深色</string>
+    <string name="always_light">始终浅色</string>
+    <string name="theme_color">主题色</string>
+    <string name="not_provided">未填写</string>
+    <string name="refresh_timeout">刷新超时</string>
 </resources>

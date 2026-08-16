@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.RadioButton
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -41,24 +42,53 @@ enum class AppStatus(@ColorRes val color: Int) {
 }
 
 fun Context.dp(value: Int) = (value * resources.displayMetrics.density).toInt()
-fun Context.color(@ColorRes value: Int) = ContextCompat.getColor(this, value)
+fun Context.color(@ColorRes value: Int) = AppearancePreferences.resolve(this, value)
 
-fun Context.page(title: String): Pair<LinearLayout, LinearLayout> {
+fun Context.centered(view: View, maxWidthDp: Int = 1240, fillHeight: Boolean = false): FrameLayout = FrameLayout(this).apply {
+    val childWidth = if (resources.configuration.screenWidthDp > maxWidthDp) dp(maxWidthDp) else ViewGroup.LayoutParams.MATCH_PARENT
+    addView(view, FrameLayout.LayoutParams(
+        childWidth,
+        if (fillHeight) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT,
+        Gravity.TOP or Gravity.CENTER_HORIZONTAL
+    ))
+}
+
+fun Context.page(
+    title: String,
+    actionIcon: Int? = null,
+    actionDescription: String? = null,
+    onAction: (() -> Unit)? = null
+): Pair<LinearLayout, LinearLayout> {
     val root = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setBackgroundColor(color(R.color.surface_page))
     }
-    root.addView(TextView(this).apply {
-        text = title
-        textSize = 28f
-        setTextColor(color(R.color.text_primary))
-        setTypeface(typeface, Typeface.BOLD)
+    root.addView(LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
         setPadding(
             resources.getDimensionPixelSize(R.dimen.page_horizontal_margin),
             resources.getDimensionPixelSize(R.dimen.page_vertical_margin),
             resources.getDimensionPixelSize(R.dimen.page_horizontal_margin),
             dp(12)
         )
+        addView(TextView(context).apply {
+            text = title
+            textSize = 28f
+            setTextColor(color(R.color.text_primary))
+            setTypeface(typeface, Typeface.BOLD)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        if (actionIcon != null && onAction != null) addView(MaterialButton(context).apply {
+            minWidth = dp(48)
+            minimumWidth = dp(48)
+            minHeight = dp(48)
+            icon = ContextCompat.getDrawable(context, actionIcon)
+            iconTint = ColorStateList.valueOf(color(R.color.text_primary))
+            contentDescription = actionDescription
+            cornerRadius = dp(16)
+            backgroundTintList = ColorStateList.valueOf(color(R.color.surface_card))
+            setOnClickListener { onAction() }
+        }, LinearLayout.LayoutParams(dp(48), dp(48)))
     })
     val body = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
@@ -173,6 +203,7 @@ fun LinearLayout.field(
         boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
         helperText = helper
         isHintAnimationEnabled = true
+        boxStrokeColor = context.color(R.color.brand_primary)
         if (password) endIconMode = TextInputLayout.END_ICON_PASSWORD_TOGGLE
     }
     val edit = TextInputEditText(layout.context).apply {
@@ -257,7 +288,20 @@ fun LinearLayout.errorState(message: String, retry: () -> Unit) {
 
 fun Context.bottomSheet(title: String, content: LinearLayout.(BottomSheetDialog) -> Unit): BottomSheetDialog {
     val dialog = BottomSheetDialog(this)
-    val scroll = ScrollView(this).apply { isFillViewport = true }
+    var gestureStartY = 0f
+    val scroll = ScrollView(this).apply {
+        isFillViewport = true
+        setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> gestureStartY = event.rawY
+                MotionEvent.ACTION_MOVE -> if (event.rawY - gestureStartY > dp(72)) {
+                    dialog.dismiss()
+                    gestureStartY = event.rawY
+                }
+            }
+            false
+        }
+    }
     val body = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setBackgroundColor(color(R.color.surface_card))
@@ -265,7 +309,7 @@ fun Context.bottomSheet(title: String, content: LinearLayout.(BottomSheetDialog)
         label(title).apply { textSize = 22f; setTypeface(typeface, Typeface.BOLD) }
         content(dialog)
     }
-    scroll.addView(body)
+    scroll.addView(centered(body, 760))
     dialog.setContentView(scroll)
     dialog.setOnShowListener {
         dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { sheet ->
@@ -293,8 +337,35 @@ fun Context.wheelPicker(title: String, values: List<String>, selected: Int = 0, 
         return
     }
     var choice = selected.coerceIn(0, values.lastIndex)
-    AlertDialog.Builder(this).setTitle(title).setSingleChoiceItems(values.toTypedArray(), choice) { _, which -> choice = which }
-        .setNegativeButton(R.string.cancel, null).setPositiveButton(R.string.confirm) { _, _ -> chosen(choice) }.show()
+    val radios = mutableListOf<RadioButton>()
+    val choices = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(12), dp(4), dp(12), dp(4))
+    }
+    values.forEachIndexed { index, value ->
+        val radio = RadioButton(this).apply {
+            text = value
+            textSize = 16f
+            minHeight = dp(52)
+            isChecked = index == choice
+            setTextColor(color(R.color.text_primary))
+            AppearancePreferences.tint(this)
+            setOnClickListener {
+                choice = index
+                radios.forEachIndexed { itemIndex, item -> item.isChecked = itemIndex == index }
+            }
+        }
+        radios += radio
+        choices.addView(radio, LinearLayout.LayoutParams(-1, -2))
+    }
+    val scroll = ScrollView(this).apply { addView(choices) }
+    val dialog = AlertDialog.Builder(this).setTitle(title).setView(scroll)
+        .setNegativeButton(R.string.cancel, null).setPositiveButton(R.string.confirm) { _, _ -> chosen(choice) }.create()
+    dialog.setOnShowListener {
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(AppearancePreferences.color(this))
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(AppearancePreferences.color(this))
+    }
+    dialog.show()
 }
 
 fun View.snack(message: String, duration: Int = Snackbar.LENGTH_SHORT) = Snackbar.make(this, message, duration).show()

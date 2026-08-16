@@ -65,7 +65,6 @@ struct Index {
 
   aboutToDisappear(): void {
     this.controller?.stopPolling();
-    this.unbindTabScrollers();
   }
 
   private applyThemeColor(color: string, persist: boolean = true): void {
@@ -97,38 +96,6 @@ struct Index {
     }
   }
 
-  private unbindTabScrollers(): void {
-    [this.homeScroller, this.deviceScroller, this.networkScroller, this.logsScroller]
-      .forEach((scroller: Scroller): void => {
-        try {
-          this.tabsController.unbindScroller(scroller);
-        } catch (_) {
-        }
-      });
-  }
-
-  private bindTabScrollers(): void {
-    this.unbindTabScrollers();
-    this.tabsController.bindScroller(0, this.homeScroller);
-    if (this.managementAuthenticated) {
-      this.tabsController.bindScroller(1, this.deviceScroller);
-      this.tabsController.bindScroller(2, this.networkScroller);
-      this.tabsController.bindScroller(3, this.logsScroller);
-    } else {
-      this.tabsController.bindScroller(1, this.logsScroller);
-    }
-  }
-
-  private refreshTabScrollBindings(): void {
-    setTimeout((): void => {
-      try {
-        this.bindTabScrollers();
-      } catch (error) {
-        hilog.warn(DOMAIN, TAG, 'Unable to bind tab scrollers: %{public}s', JSON.stringify(error));
-      }
-    }, 0);
-  }
-
   private updateManagementAuthenticated(authenticated: boolean): void {
     const structureChanged = this.managementAuthenticated !== authenticated;
     if (structureChanged) {
@@ -144,7 +111,6 @@ struct Index {
         }
       }, 0);
     }
-    this.refreshTabScrollBindings();
   }
 
   @Builder
@@ -435,7 +401,6 @@ struct Index {
       .onAttach((): void => {
         try {
           this.tabsController.preloadItems(this.managementAuthenticated ? [0, 1, 2, 3] : [0, 1]);
-          this.bindTabScrollers();
         } catch (error) {
           hilog.error(DOMAIN, TAG, 'OnAttach preloadItems failed: %{public}s', JSON.stringify(error));
         }

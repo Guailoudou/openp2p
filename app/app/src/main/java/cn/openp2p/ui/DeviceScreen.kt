@@ -42,12 +42,15 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
     private var errorMessage: String? = null
     private var busyDevice: String? = null
     private var currentMappings: List<PortMapping> = emptyList()
+    private var refreshSequence = 0
+    private var activeRefreshId = 0
 
     init {
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(activity.color(R.color.surface_page))
         }
+        val header = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         title.apply {
             text = activity.getString(R.string.devices_title_count, 0)
             textSize = 28f
@@ -55,7 +58,7 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
             setTypeface(typeface, Typeface.BOLD)
             setPadding(activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), activity.dp(20), activity.dp(16), activity.dp(8))
         }
-        root.addView(title)
+        header.addView(title)
         val filters = ChipGroup(activity).apply {
             isSingleSelection = true
             isSelectionRequired = true
@@ -72,36 +75,61 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
                 isCheckable = true
                 isChecked = id == filter
                 minHeight = activity.dp(48)
+                chipBackgroundColor = ColorStateList(
+                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                    intArrayOf(AppearancePreferences.softColor(activity), activity.color(R.color.surface_subtle))
+                )
+                setTextColor(ColorStateList(
+                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                    intArrayOf(AppearancePreferences.color(activity), activity.color(R.color.text_primary))
+                ))
             })
         }
         filters.setOnCheckedChangeListener { _, checkedId -> filter = checkedId; render() }
-        root.addView(filters)
+        header.addView(filters)
+        root.addView(activity.centered(header))
         list.orientation = LinearLayout.VERTICAL
         list.setPadding(activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), 0, activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), activity.dp(32))
         swipe.setColorSchemeColors(activity.color(R.color.brand_primary))
         swipe.addView(ScrollView(activity).apply { addView(list) })
         swipe.setOnRefreshListener { load() }
-        root.addView(swipe, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(activity.centered(swipe, fillHeight = true), LinearLayout.LayoutParams(-1, 0, 1f))
         view = root
         render()
         load()
     }
 
     private fun load() {
-        if (!firstLoad) swipe.isRefreshing = true
+        val manualRefresh = !firstLoad
+        if (manualRefresh) swipe.isRefreshing = true
+        val refreshId = ++refreshSequence
+        activeRefreshId = refreshId
+        swipe.postDelayed({
+            if (activeRefreshId != refreshId) return@postDelayed
+            activeRefreshId = 0
+            firstLoad = false
+            if (!manualRefresh) errorMessage = activity.getString(R.string.refresh_timeout)
+            swipe.isRefreshing = false
+            render()
+            swipe.snack(activity.getString(R.string.refresh_timeout))
+        }, 5_000)
         activity.lifecycleScope.launch {
             try {
                 val result = session.api.devices()
+                if (activeRefreshId != refreshId) return@launch
                 devices = result.nodes
                 latestVersion = result.latestVersion
                 errorMessage = null
-            } catch (e: Exception) {
-                errorMessage = e.message ?: activity.getString(R.string.load_failed)
-            } finally {
-                firstLoad = false
                 swipe.isRefreshing = false
-                render()
+            } catch (e: Exception) {
+                if (activeRefreshId != refreshId) return@launch
+                errorMessage = e.message ?: activity.getString(R.string.load_failed)
+                if (!manualRefresh) swipe.isRefreshing = false
             }
+            if (activeRefreshId != refreshId) return@launch
+            activeRefreshId = 0
+            firstLoad = false
+            render()
         }
     }
 
@@ -117,7 +145,9 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
             }
             return
         }
-        visible.forEach { device ->
+        val columns = if (activity.resources.configuration.screenWidthDp >= 840) 2 else 1
+        var gridRow: LinearLayout? = null
+        visible.forEachIndexed { index, device ->
             val card = activity.card {
                 val header = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
                 header.addView(TextView(activity).apply {
@@ -150,11 +180,25 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
                 setOnClickListener { openMappings(device) }
                 setOnLongClickListener { anchor -> showMenu(anchor, device); true }
             }
-            list.addView(activity.swipeActions(card, deviceSwipeActions(device)) { swiping ->
+            val item = activity.swipeActions(card, deviceSwipeActions(device)) { swiping ->
                 swipe.isEnabled = !swiping
-            },
-                LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(12) })
+            }
+            if (columns == 1) {
+                list.addView(item, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(12) })
+            } else {
+                if (index % columns == 0) {
+                    gridRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+                    list.addView(gridRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(12) })
+                }
+                gridRow?.addView(item, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    leftMargin = if (index % columns == 0) 0 else activity.dp(6)
+                    rightMargin = if (index % columns == 0) activity.dp(6) else 0
+                })
+            }
         }
+        if (columns == 2 && visible.size % 2 == 1) gridRow?.addView(View(activity), LinearLayout.LayoutParams(0, 1, 1f).apply {
+            leftMargin = activity.dp(6)
+        })
     }
 
     private fun copyAddresses(device: Device) {
@@ -228,7 +272,7 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
             val name = field(activity.getString(R.string.device_name), device.name)
             val bandwidth = field(activity.getString(R.string.bandwidth_mbps), device.bandwidth.takeIf { it > 0 }?.toString() ?: "10", numeric = true)
             val port = field(activity.getString(R.string.public_port), device.publicIPPort.toString(), numeric = true)
-            val v6 = Switch(activity).apply { text = activity.getString(R.string.force_ipv6); isChecked = device.forceV6 != 0; minHeight = activity.dp(48) }
+            val v6 = Switch(activity).apply { text = activity.getString(R.string.force_ipv6); isChecked = device.forceV6 != 0; minHeight = activity.dp(48); AppearancePreferences.tint(this) }
             addView(v6)
             val save = action(activity.getString(R.string.save_changes)) {}
             save.setOnClickListener {
@@ -319,6 +363,7 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
                         text = activity.getString(if (mapping.enabled) R.string.enabled else R.string.disabled)
                         isChecked = mapping.enabled
                         minHeight = activity.dp(48)
+                        AppearancePreferences.tint(this)
                         setOnCheckedChangeListener { _, checked ->
                             runApi(device, activity.getString(R.string.mapping_status_updated), { session.api.switchMapping(device, mapping, checked) }) { dialog.dismiss(); openMappings(device) }
                         }

@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <style name="Theme.OpenP2P" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/brand_primary</item>
         <item name="colorPrimaryVariant">@color/brand_primary_dark</item>
@@ -9,9 +9,9 @@
         <item name="colorSurface">@color/surface_card</item>
         <item name="colorOnSurface">@color/text_primary</item>
         <item name="colorError">@color/state_error</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:statusBarColor">@color/surface_page</item>
-        <item name="android:navigationBarColor">@color/surface_card</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
+        <item name="android:statusBarColor" tools:targetApi="lollipop">@color/surface_page</item>
+        <item name="android:navigationBarColor" tools:targetApi="lollipop">@color/surface_card</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:fontFamily">sans</item>
         <item name="materialButtonStyle">@style/Widget.OpenP2P.Button</item>

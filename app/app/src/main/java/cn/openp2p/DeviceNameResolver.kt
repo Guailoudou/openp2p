@@ -50,11 +50,13 @@ object DeviceNameResolver {
     }.getOrNull()
 
     private fun readBluetoothAdapterName(context: Context): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR2) return null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) !=
             PackageManager.PERMISSION_GRANTED) return null
         return runCatching {
-            usable(context.getSystemService(BluetoothManager::class.java)?.adapter?.name)
+            val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+            usable(manager?.adapter?.name)
         }.getOrNull()
     }
 

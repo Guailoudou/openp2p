@@ -16,6 +16,7 @@ import android.widget.Switch
 import android.widget.TextView
 import androidx.appcompat.widget.PopupMenu
 import androidx.lifecycle.lifecycleScope
+import androidx.core.view.ViewCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import cn.openp2p.R
 import cn.openp2p.management.Device
@@ -36,6 +37,8 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
     private var firstLoad = true
     private var errorMessage: String? = null
     private val memberIpViews = mutableMapOf<String, TextView>()
+    private var refreshSequence = 0
+    private var activeRefreshId = 0
 
     private fun tunnelStatus(value: JSONObject): Pair<String, AppStatus> = when {
         !value.has("isActive") -> activity.getString(R.string.tunnel_offline) to AppStatus.NEUTRAL
@@ -54,44 +57,64 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(activity.color(R.color.surface_page))
         }
-        root.addView(TextView(activity).apply {
+        val header = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        header.addView(TextView(activity).apply {
             text = activity.getString(R.string.nav_network)
             textSize = 28f
             setTextColor(activity.color(R.color.text_primary))
             setTypeface(typeface, Typeface.BOLD)
             setPadding(activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), activity.dp(20), activity.dp(16), 0)
         })
-        root.addView(TextView(activity).apply {
+        header.addView(TextView(activity).apply {
             text = activity.getString(R.string.network_subtitle)
             textSize = 14f
             setTextColor(activity.color(R.color.text_secondary))
             setPadding(activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), activity.dp(4), activity.dp(16), activity.dp(12))
         })
+        root.addView(activity.centered(header))
         body.orientation = LinearLayout.VERTICAL
         body.setPadding(activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), 0, activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), activity.dp(32))
         swipe.setColorSchemeColors(activity.color(R.color.brand_primary))
         swipe.addView(ScrollView(activity).apply { addView(body) })
         swipe.setOnRefreshListener { load() }
-        root.addView(swipe, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(activity.centered(swipe, fillHeight = true), LinearLayout.LayoutParams(-1, 0, 1f))
         view = root
         render()
         load()
     }
 
     private fun load() {
-        if (!firstLoad) swipe.isRefreshing = true
+        val manualRefresh = !firstLoad
+        if (manualRefresh) swipe.isRefreshing = true
+        val refreshId = ++refreshSequence
+        activeRefreshId = refreshId
+        swipe.postDelayed({
+            if (activeRefreshId != refreshId) return@postDelayed
+            activeRefreshId = 0
+            firstLoad = false
+            if (!manualRefresh) errorMessage = activity.getString(R.string.refresh_timeout)
+            swipe.isRefreshing = false
+            render()
+            swipe.snack(activity.getString(R.string.refresh_timeout))
+        }, 5_000)
         activity.lifecycleScope.launch {
             try {
-                config = session.api.sdwan()
-                devices = session.api.devices().nodes
+                val loadedConfig = session.api.sdwan()
+                val loadedDevices = session.api.devices().nodes
+                if (activeRefreshId != refreshId) return@launch
+                config = loadedConfig
+                devices = loadedDevices
                 errorMessage = null
-            } catch (e: Exception) {
-                errorMessage = e.message ?: activity.getString(R.string.load_failed)
-            } finally {
-                firstLoad = false
                 swipe.isRefreshing = false
-                render()
+            } catch (e: Exception) {
+                if (activeRefreshId != refreshId) return@launch
+                errorMessage = e.message ?: activity.getString(R.string.load_failed)
+                if (!manualRefresh) swipe.isRefreshing = false
             }
+            if (activeRefreshId != refreshId) return@launch
+            activeRefreshId = 0
+            firstLoad = false
+            render()
         }
     }
 
@@ -101,7 +124,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
         if (firstLoad) { body.loadingState(); return }
         errorMessage?.let { body.errorState(it) { load() }; return }
         var gatewayInput: TextInputEditText? = null
-        body.addView(activity.card {
+        val settingsCard = activity.card {
             label(activity.getString(R.string.network_settings)).apply {
                 textSize = 18f
                 setTypeface(typeface, Typeface.BOLD)
@@ -131,9 +154,9 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                 }
             }
             modeRow.addView(modeButton(activity.getString(R.string.network_mode_fullmesh), "fullmesh"),
-                LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = activity.dp(4) })
+                LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = activity.dp(4) })
             modeRow.addView(modeButton(activity.getString(R.string.network_mode_central), "central"),
-                LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = activity.dp(4) })
+                LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = activity.dp(4) })
             addView(modeRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(12) })
 
             val nodeLabel = activity.getString(if (config.mode == "central") R.string.central_node else R.string.specified_relay_node)
@@ -151,6 +174,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                     textSize = 16f
                     isChecked = config.forceRelay == 1
                     minHeight = activity.dp(48)
+                    AppearancePreferences.tint(this)
                     setOnCheckedChangeListener { _, checked -> config.forceRelay = if (checked) 1 else 0 }
                 })
             }
@@ -162,9 +186,9 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                     render()
                 }
             }
-        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(16) })
+        }
 
-        body.addView(activity.card {
+        val membersCard = activity.card {
             label(activity.getString(R.string.network_members)).apply {
                 textSize = 18f
                 setTypeface(typeface, Typeface.BOLD)
@@ -196,7 +220,18 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                     swipe.isEnabled = !swiping
                 }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(8) })
             }
-        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(16) })
+        }
+        if (activity.resources.configuration.screenWidthDp >= 840) {
+            body.addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.TOP
+                addView(settingsCard, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = activity.dp(8) })
+                addView(membersCard, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = activity.dp(8) })
+            }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(16) })
+        } else {
+            body.addView(settingsCard, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(16) })
+            body.addView(membersCard, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(16) })
+        }
 
         val available = availableDevices()
         if (available.isNotEmpty()) {
@@ -271,15 +306,15 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
             val gateway = field(activity.getString(R.string.network_address), draft.gateway)
             sectionHeader(activity.getString(R.string.network_mode))
             val mode = RadioGroup(activity).apply { orientation = RadioGroup.VERTICAL }
-            val full = RadioButton(activity).apply { text = activity.getString(R.string.network_mode_fullmesh); id = View.generateViewId(); minHeight = activity.dp(48) }
-            val central = RadioButton(activity).apply { text = activity.getString(R.string.network_mode_central); id = View.generateViewId(); minHeight = activity.dp(48) }
+            val full = RadioButton(activity).apply { text = activity.getString(R.string.network_mode_fullmesh); id = ViewCompat.generateViewId(); minHeight = activity.dp(48); AppearancePreferences.tint(this) }
+            val central = RadioButton(activity).apply { text = activity.getString(R.string.network_mode_central); id = ViewCompat.generateViewId(); minHeight = activity.dp(48); AppearancePreferences.tint(this) }
             mode.addView(full); mode.addView(central)
             mode.check(if (draft.mode == "central") central.id else full.id)
             addView(mode)
             var centralNode = draft.centralNode
             val centralButton = secondaryAction("") {}
             sectionHeader(activity.getString(R.string.force_relay))
-            val relay = Switch(activity).apply { text = activity.getString(R.string.force_relay); textSize = 16f; isChecked = draft.forceRelay != 0; minHeight = activity.dp(48) }
+            val relay = Switch(activity).apply { text = activity.getString(R.string.force_relay); textSize = 16f; isChecked = draft.forceRelay != 0; minHeight = activity.dp(48); AppearancePreferences.tint(this) }
             addView(relay)
             fun updateModeControls() {
                 val label = activity.getString(

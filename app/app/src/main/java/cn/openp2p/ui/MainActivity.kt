@@ -39,6 +39,7 @@ import cn.openp2p.management.ManagementSession
 import cn.openp2p.security.SecureCredentialStore
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -49,6 +50,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var root: LinearLayout
     private lateinit var content: FrameLayout
     private lateinit var navigation: BottomNavigationView
+    private lateinit var coreButton: MaterialButton
+    private lateinit var miniBar: LinearLayout
+    private lateinit var miniBarHost: FrameLayout
     private lateinit var session: ManagementSession
     private lateinit var secureStore: SecureCredentialStore
     private var selected = HOME
@@ -62,11 +66,13 @@ class MainActivity : AppCompatActivity() {
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             homeBusy = false
+            updateCoreToggle()
             if (selected == HOME) showHome()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        AppearancePreferences.applyMode(this)
         super.onCreate(savedInstanceState)
         Logger.init(getExternalFilesDir("log") ?: filesDir)
         session = ManagementSession.get(this)
@@ -80,8 +86,8 @@ class MainActivity : AppCompatActivity() {
         content = FrameLayout(this)
         navigation = BottomNavigationView(this).apply {
             setBackgroundColor(color(R.color.surface_card))
-            itemIconTintList = ContextCompat.getColorStateList(this@MainActivity, R.color.navigation_item_tint)
-            itemTextColor = ContextCompat.getColorStateList(this@MainActivity, R.color.navigation_item_tint)
+            itemIconTintList = AppearancePreferences.navigationTint(this@MainActivity)
+            itemTextColor = AppearancePreferences.navigationTint(this@MainActivity)
             labelVisibilityMode = com.google.android.material.bottomnavigation.LabelVisibilityMode.LABEL_VISIBILITY_LABELED
             setOnNavigationItemSelectedListener { item ->
                 selected = item.itemId
@@ -89,16 +95,47 @@ class MainActivity : AppCompatActivity() {
                 true
             }
         }
+        coreButton = MaterialButton(this).apply {
+            minWidth = dp(56)
+            minimumWidth = dp(56)
+            minHeight = dp(56)
+            cornerRadius = dp(28)
+            iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+            iconPadding = 0
+            setOnClickListener { toggleCoreFromMiniBar() }
+        }
+        miniBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(4), dp(8), dp(4))
+            setBackgroundColor(color(R.color.surface_card))
+            addView(navigation, LinearLayout.LayoutParams(0, dp(64), 1f))
+            addView(coreButton, LinearLayout.LayoutParams(dp(56), dp(56)).apply { leftMargin = dp(8) })
+        }
+        val miniCard = MaterialCardView(this).apply {
+            radius = dp(28).toFloat()
+            cardElevation = dp(8).toFloat()
+            setCardBackgroundColor(color(R.color.surface_card))
+            strokeWidth = dp(1)
+            strokeColor = color(R.color.border_default)
+            addView(miniBar, FrameLayout.LayoutParams(-1, -2))
+        }
+        miniBarHost = centered(miniCard, 840).apply {
+            setBackgroundColor(color(R.color.surface_page))
+            setPadding(dp(12), dp(4), dp(12), dp(8))
+            clipToPadding = false
+        }
         root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
-        root.addView(navigation, LinearLayout.LayoutParams(-1, -2))
+        root.addView(miniBarHost, LinearLayout.LayoutParams(-1, -2))
         setContentView(root)
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             root.setPadding(insets.systemWindowInsetLeft, insets.systemWindowInsetTop, insets.systemWindowInsetRight, 0)
-            navigation.setPadding(0, 0, 0, insets.systemWindowInsetBottom)
+            miniBarHost.setPadding(dp(12), dp(4), dp(12), dp(8) + insets.systemWindowInsetBottom)
             insets
         }
 
         rebuildNavigation(false)
+        updateCoreToggle()
         registerReceiver(statusReceiver, IntentFilter(OpenP2PService.ACTION_STATUS_CHANGED))
         receiverRegistered = true
         lifecycleScope.launch {
@@ -171,9 +208,10 @@ class MainActivity : AppCompatActivity() {
             navigation.menu.add(0, NETWORK, 2, R.string.nav_network).setIcon(R.drawable.ic_hotspot)
         }
         navigation.menu.add(0, LOGS, 3, R.string.nav_logs).setIcon(R.drawable.ic_logs)
-        navigation.menu.add(0, PROFILE, 4, R.string.nav_profile).setIcon(R.drawable.ic_profile)
-        selected = if (navigation.menu.findItem(old) != null) old else PROFILE
+        selected = if (navigation.menu.findItem(old) != null) old else HOME
         navigation.selectedItemId = selected
+        navigation.itemIconTintList = AppearancePreferences.navigationTint(this)
+        navigation.itemTextColor = AppearancePreferences.navigationTint(this)
     }
 
     private fun showSelected() {
@@ -189,7 +227,6 @@ class MainActivity : AppCompatActivity() {
                 setPage(screen.view)
             }
             LOGS -> showLogs()
-            PROFILE -> showProfile()
         }
     }
 
@@ -200,7 +237,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showHome() {
-        val (page, body) = page(getString(R.string.app_name))
+        val (page, body) = page(
+            getString(R.string.app_name),
+            R.drawable.ic_settings,
+            getString(R.string.settings)
+        ) { showSettings() }
         val prefs = getSharedPreferences(OpenP2PService.PREFERENCES, MODE_PRIVATE)
         val rawState = prefs.getString(OpenP2PService.KEY_STATE, "").orEmpty()
         val desired = prefs.getBoolean(OpenP2PService.KEY_DESIRED_RUNNING, false)
@@ -233,7 +274,7 @@ class MainActivity : AppCompatActivity() {
             desired -> R.string.connection_established
             else -> R.string.connection_stopped_hint
         })
-        body.addView(card {
+        val statusCard = card {
             val header = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
             header.addView(TextView(context).apply {
                 text = heroTitle
@@ -245,16 +286,13 @@ class MainActivity : AppCompatActivity() {
             addView(header)
             label(heroDescription, true).apply { setPadding(0, context.dp(8), 0, context.dp(8)) }
             if (rawState.isNotBlank() && hasError) label(rawState, true)
-            val buttonText = getString(if (desired) R.string.stop_openp2p else R.string.start_openp2p)
-            action(buttonText) {
-                homeBusy = true
-                showHome()
-                if (desired) stopCore() else requestStartCore()
-            }.setLoading(transitioning, buttonText, getString(R.string.please_wait))
-        })
+        }
 
-        body.sectionHeader(getString(R.string.configuration_overview))
-        body.addView(card {
+        val configurationCard = card {
+            label(getString(R.string.configuration_overview)).apply {
+                textSize = 18f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            }
             val token = coreToken(prefs)
             val vpnPermissionRequired = prefs.getBoolean(OpenP2PService.KEY_VPN_PERMISSION_REQUIRED, false)
             keyValue(getString(R.string.token_source), getString(when {
@@ -270,7 +308,18 @@ class MainActivity : AppCompatActivity() {
             if (vpnPermissionRequired) {
                 secondaryAction(getString(R.string.reauthorize_vpn)) { requestStartCore() }
             }
-        })
+        }
+        if (resources.configuration.screenWidthDp >= 840) {
+            body.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.TOP
+                addView(statusCard, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(8) })
+                addView(configurationCard, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(8) })
+            })
+        } else {
+            body.addView(statusCard)
+            body.addView(configurationCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
+        }
 
         if (!session.authenticated) {
             body.sectionHeader(getString(R.string.configure_token))
@@ -293,6 +342,32 @@ class MainActivity : AppCompatActivity() {
         }
         body.secondaryAction(getString(R.string.common_questions)) { showBackgroundHelp() }
         setPage(page)
+        updateCoreToggle()
+    }
+
+    private fun toggleCoreFromMiniBar() {
+        val prefs = getSharedPreferences(OpenP2PService.PREFERENCES, MODE_PRIVATE)
+        val desired = prefs.getBoolean(OpenP2PService.KEY_DESIRED_RUNNING, false)
+        homeBusy = true
+        if (desired) stopCore() else requestStartCore()
+        updateCoreToggle(!desired)
+        if (selected == HOME) showHome()
+    }
+
+    private fun updateCoreToggle(desiredOverride: Boolean? = null) {
+        if (!::coreButton.isInitialized) return
+        val running = desiredOverride ?: getSharedPreferences(OpenP2PService.PREFERENCES, MODE_PRIVATE)
+            .getBoolean(OpenP2PService.KEY_DESIRED_RUNNING, false)
+        coreButton.icon = ContextCompat.getDrawable(this, if (running) R.drawable.ic_pause else R.drawable.ic_play)
+        coreButton.iconTint = android.content.res.ColorStateList.valueOf(
+            color(if (running) R.color.brand_on_primary else R.color.text_primary)
+        )
+        coreButton.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            if (running) AppearancePreferences.color(this) else color(R.color.surface_card)
+        )
+        coreButton.strokeWidth = if (running) 0 else dp(1)
+        coreButton.strokeColor = android.content.res.ColorStateList.valueOf(color(R.color.border_default))
+        coreButton.contentDescription = getString(if (running) R.string.stop_openp2p else R.string.start_openp2p)
     }
 
     private fun requestStartCore() {
@@ -343,10 +418,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startCore() {
+        getSharedPreferences(OpenP2PService.PREFERENCES, MODE_PRIVATE).edit()
+            .putBoolean(OpenP2PService.KEY_DESIRED_RUNNING, true)
+            .putString(OpenP2PService.KEY_STATE, getString(R.string.status_running))
+            .apply()
+        updateCoreToggle(true)
         ContextCompat.startForegroundService(this, Intent(this, OpenP2PService::class.java).setAction(OpenP2PService.ACTION_START))
     }
 
     private fun stopCore() {
+        getSharedPreferences(OpenP2PService.PREFERENCES, MODE_PRIVATE).edit()
+            .putBoolean(OpenP2PService.KEY_DESIRED_RUNNING, false)
+            .putString(OpenP2PService.KEY_STATE, getString(R.string.status_stopped))
+            .apply()
+        updateCoreToggle(false)
         startService(Intent(this, OpenP2PService::class.java).setAction(OpenP2PService.ACTION_STOP))
     }
 
@@ -362,7 +447,7 @@ class MainActivity : AppCompatActivity() {
     private fun showLogs() {
         val (page, body) = page(getString(R.string.nav_logs))
         val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val autoScroll = Switch(this).apply { text = getString(R.string.auto_scroll); isChecked = true }
+        val autoScroll = Switch(this).apply { text = getString(R.string.auto_scroll); isChecked = true; AppearancePreferences.tint(this) }
         controls.addView(autoScroll, LinearLayout.LayoutParams(0, -2, 1f))
         val export = MaterialButton(this).apply { text = getString(R.string.export_logs); minWidth = 0 }
         controls.addView(export); body.addView(controls)
@@ -377,7 +462,8 @@ class MainActivity : AppCompatActivity() {
             setPadding(dp(12), dp(12), dp(12), dp(12))
         }
         logScroll.addView(text)
-        body.addView(logScroll, LinearLayout.LayoutParams(-1, dp(440)))
+        val logHeight = (resources.configuration.screenHeightDp - 240).coerceIn(320, 720)
+        body.addView(logScroll, LinearLayout.LayoutParams(-1, dp(logHeight)))
         export.setOnClickListener {
             runCatching {
                 val file = Logger.createExportFile(this)
@@ -411,39 +497,46 @@ class MainActivity : AppCompatActivity() {
         setPage(page)
     }
 
-    private fun showProfile() {
-        val (page, body) = page(getString(R.string.nav_profile))
-        body.addView(card {
-            label(getString(R.string.management_account))
-            label(if (session.authenticated) session.profile.user.ifBlank { session.username } else getString(R.string.account_description), true)
-            setOnClickListener { showManagementAccount() }
-        })
-        body.sectionHeader(getString(R.string.services_support))
-        body.addView(card {
-            label(getString(R.string.management_console))
-            label(getString(R.string.management_console_description), true)
-            setOnClickListener { showManagementConsole() }
-        })
-        body.addView(card {
-            label(getString(R.string.background_keep_alive))
-            label(getString(R.string.android_background_keep_alive_description), true)
-            setOnClickListener { showBackgroundHelp() }
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
-        body.sectionHeader(getString(R.string.about))
-        body.addView(card {
-            label(getString(R.string.about))
-            label(getString(R.string.about_description), true)
-            setOnClickListener { showAbout() }
-        })
-        setPage(page)
+    private fun showSettings() {
+        bottomSheet(getString(R.string.settings)) { sheet ->
+            fun settingsCard(title: String, subtitle: String? = null, action: () -> Unit): MaterialCardView = card {
+                label(title)
+                if (!subtitle.isNullOrBlank()) label(subtitle, true)
+                setOnClickListener { action() }
+            }
+            addView(settingsCard(
+                getString(R.string.management_account),
+                if (session.authenticated) session.profile.user.ifBlank { session.username } else getString(R.string.account_description)
+            ) { sheet.dismiss(); showManagementAccount() })
+            addView(settingsCard(
+                getString(R.string.background_keep_alive),
+                getString(R.string.android_background_keep_alive_description)
+            ) { sheet.dismiss(); showBackgroundHelp() }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+            addView(settingsCard(getString(R.string.appearance_settings)) {
+                sheet.dismiss(); showAppearanceSettings()
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+            addView(settingsCard(getString(R.string.about), getString(R.string.about_information)) {
+                sheet.dismiss(); showAbout()
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        }
     }
 
     private fun showManagementAccount() {
         bottomSheet(getString(R.string.management_account)) { dialog ->
             if (session.authenticated) {
                 keyValue(getString(R.string.username), session.profile.user.ifBlank { session.username })
-                if (session.profile.email.isNotBlank()) keyValue(getString(R.string.email), session.profile.email)
-                if (session.profile.phone.isNotBlank()) keyValue(getString(R.string.phone), session.profile.phone)
+                val emailValue = session.profile.email.trim()
+                keyValue(getString(R.string.email), maskedEmail(emailValue)).apply {
+                    if (emailValue.isNotBlank()) setOnClickListener {
+                        (getChildAt(1) as? TextView)?.text = emailValue
+                    }
+                }
+                val phoneValue = session.profile.phone.trim()
+                keyValue(getString(R.string.phone), maskedContact(phoneValue)).apply {
+                    if (phoneValue.isNotBlank()) setOnClickListener {
+                        (getChildAt(1) as? TextView)?.text = phoneValue
+                    }
+                }
                 if (session.profile.addTime.isNotBlank()) keyValue(getString(R.string.registration_time), session.profile.addTime)
                 val token = session.profile.token
                 keyValue(getString(R.string.token_label), getString(R.string.masked_token, token.takeLast(4)), mono = true)
@@ -458,10 +551,10 @@ class MainActivity : AppCompatActivity() {
                             session.logout()
                             deviceScreen = null
                             networkScreen = null
-                            selected = PROFILE
+                            selected = HOME
                             rebuildNavigation(false)
                             dialog.dismiss()
-                            showProfile()
+                            showHome()
                         }
                     }
                 }
@@ -482,7 +575,7 @@ class MainActivity : AppCompatActivity() {
                             saveManagedToken(session.profile.token)
                             rebuildNavigation(true)
                             dialog.dismiss()
-                            showProfile()
+                            showHome()
                             content.snack(getString(R.string.login_success))
                         } else password.showError(session.lastError.ifBlank { getString(R.string.login_failed) })
                     }
@@ -506,6 +599,7 @@ class MainActivity : AppCompatActivity() {
             val agreement = CheckBox(context).apply {
                 text = getString(R.string.agree_user_agreement)
                 setTextColor(color(R.color.text_primary))
+                AppearancePreferences.tint(this)
             }
             addView(agreement, LinearLayout.LayoutParams(-1, -2))
             val agreementLinks = LinearLayout(context).apply {
@@ -545,7 +639,7 @@ class MainActivity : AppCompatActivity() {
                         saveManagedToken(session.profile.token)
                         rebuildNavigation(true)
                         dialog.dismiss()
-                        showProfile()
+                        showHome()
                         content.snack(getString(R.string.registration_success))
                     } else confirmation.showError(session.lastError.ifBlank { getString(R.string.registration_failed) })
                 }
@@ -570,6 +664,26 @@ class MainActivity : AppCompatActivity() {
         (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(label, value))
     }
 
+    private fun maskedEmail(value: String): String {
+        if (value.isBlank()) return getString(R.string.not_provided)
+        val at = value.indexOf('@')
+        if (at < 0) return maskedContact(value)
+        val local = value.substring(0, at)
+        val domain = value.substring(at)
+        return when (local.length) {
+            0, 1 -> "***$domain"
+            2 -> "${local.take(1)}***$domain"
+            else -> "${local.take(1)}***${local.takeLast(1)}$domain"
+        }
+    }
+
+    private fun maskedContact(value: String): String = when {
+        value.isBlank() -> getString(R.string.not_provided)
+        value.length <= 4 -> "****"
+        value.length <= 7 -> "${value.take(2)}***${value.takeLast(2)}"
+        else -> "${value.take(3)}****${value.takeLast(4)}"
+    }
+
     private fun showBackgroundHelp() {
         bottomSheet(getString(R.string.background_keep_alive)) { dialog ->
             label(getString(R.string.phone_setting), true)
@@ -577,6 +691,37 @@ class MainActivity : AppCompatActivity() {
             secondaryAction(getString(R.string.open_autostart_settings)) { openAutoStartSettings() }
             secondaryAction(getString(R.string.open_app_settings)) { openAppSettings() }
             action(getString(R.string.done)) { dialog.dismiss() }
+        }
+    }
+
+    private fun showAppearanceSettings() {
+        bottomSheet(getString(R.string.appearance_settings)) { dialog ->
+            sectionHeader(getString(R.string.dark_mode))
+            val modeLabels = listOf(getString(R.string.follow_system), getString(R.string.always_dark), getString(R.string.always_light))
+            val modeValues = listOf(AppearancePreferences.MODE_SYSTEM, AppearancePreferences.MODE_DARK, AppearancePreferences.MODE_LIGHT)
+            secondaryAction(modeLabels[modeValues.indexOf(AppearancePreferences.mode(this@MainActivity)).coerceAtLeast(0)]) {
+                context.wheelPicker(getString(R.string.dark_mode), modeLabels, modeValues.indexOf(AppearancePreferences.mode(this@MainActivity))) { index ->
+                    AppearancePreferences.setMode(this@MainActivity, modeValues[index])
+                }
+            }
+            sectionHeader(getString(R.string.theme_color))
+            val colors = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+            AppearancePreferences.colors.forEach { hex ->
+                colors.addView(MaterialButton(context).apply {
+                    minWidth = dp(44); minimumWidth = dp(44); minHeight = dp(44)
+                    cornerRadius = dp(22); text = ""
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor(hex))
+                    strokeWidth = if (AppearancePreferences.colorHex(context) == hex) dp(3) else 0
+                    strokeColor = android.content.res.ColorStateList.valueOf(color(R.color.surface_card))
+                    contentDescription = hex
+                    setOnClickListener {
+                        AppearancePreferences.setColor(this@MainActivity, hex)
+                        dialog.dismiss()
+                        recreate()
+                    }
+                }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
+            }
+            addView(colors)
         }
     }
 
@@ -639,7 +784,6 @@ class MainActivity : AppCompatActivity() {
         private const val DEVICES = 2
         private const val NETWORK = 3
         private const val LOGS = 4
-        private const val PROFILE = 5
         private const val VPN_REQUEST = 100
         private const val BLUETOOTH_NAME_REQUEST = 101
         private const val KEY_BLUETOOTH_PERMISSION_ASKED = "bluetooth_name_permission_asked"
