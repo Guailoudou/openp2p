@@ -19,6 +19,7 @@ const MAX_PACKET_SIZE = 64 * 1024;
 const WRITE_TIMEOUT_MS = 50;
 const VPN_INTERFACE = 'vpn-tun';
 const POLL_INTERVAL_MS = 5;
+const MAX_PACKETS_PER_TICK = 64;
 const CORE_CHECK_INTERVAL_MS = 10 * 1000;
 const CORE_CHECK_REQUEST_POLL_MS = 250;
 const CORE_FAILURE_THRESHOLD = 3;
@@ -529,10 +530,15 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     if (this.stopping || this.vpnFd < 0 || generation !== this.vpnGeneration) {
       return;
     }
+    let packetsRead = 0;
     try {
-      const length = fileIo.readSync(this.vpnFd, this.readBuffer, { length: MAX_PACKET_SIZE, offset: 0 });
-      if (length > 0) {
+      while (packetsRead < MAX_PACKETS_PER_TICK) {
+        const length = fileIo.readSync(this.vpnFd, this.readBuffer, { length: MAX_PACKET_SIZE, offset: 0 });
+        if (length <= 0) {
+          break;
+        }
         coreNative.readTun(this.readBuffer.slice(0, length));
+        packetsRead++;
       }
     } catch (error) {
       // A non-blocking VPN fd reports EAGAIN while there is no packet. That
@@ -543,7 +549,8 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
       }
     }
     if (!this.stopping && generation === this.vpnGeneration) {
-      setTimeout((): void => this.readLoop(generation), POLL_INTERVAL_MS);
+      setTimeout((): void => this.readLoop(generation),
+        packetsRead === MAX_PACKETS_PER_TICK ? 0 : POLL_INTERVAL_MS);
     }
   }
 
@@ -551,17 +558,23 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     if (this.stopping || this.vpnFd < 0 || generation !== this.vpnGeneration) {
       return;
     }
+    let packetsWritten = 0;
     try {
-      const length = coreNative.writeTun(this.writeBuffer, WRITE_TIMEOUT_MS);
-      if (length > 0) {
+      while (packetsWritten < MAX_PACKETS_PER_TICK) {
+        const length = coreNative.writeTun(this.writeBuffer, packetsWritten === 0 ? WRITE_TIMEOUT_MS : 1);
+        if (length <= 0) {
+          break;
+        }
         fileIo.writeSync(this.vpnFd, this.writeBuffer, { length, offset: 0 });
+        packetsWritten++;
       }
     } catch (error) {
       hilog.error(DOMAIN, TAG, 'VPN write failed: %{public}s', JSON.stringify(error));
       this.stopping = true;
     }
     if (!this.stopping && generation === this.vpnGeneration) {
-      setTimeout((): void => this.writeLoop(generation), POLL_INTERVAL_MS);
+      setTimeout((): void => this.writeLoop(generation),
+        packetsWritten === MAX_PACKETS_PER_TICK ? 0 : POLL_INTERVAL_MS);
     }
   }
 
