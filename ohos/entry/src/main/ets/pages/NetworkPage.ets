@@ -1,3 +1,4 @@
+import { pasteboard } from '@kit.BasicServicesKit';
 import { PageHeader } from '../components/PageHeader';
 import {
   ManagementDevice,
@@ -295,11 +296,23 @@ export struct NetworkPage {
   @Builder
   private memberContextMenu(member: SdwanMember, index: number) {
     Menu() {
+      MenuItem({ content: '复制虚拟 IP' })
+        .onClick((): void => { this.copyMemberIp(member.ip); })
       MenuItem({ content: '编辑成员' })
         .onClick((): void => { this.openMember(member); })
       MenuItem({ content: '移除成员' })
         .onClick((): void => { this.removeMember(index); })
     }.width(180)
+  }
+
+  private async copyMemberIp(ip: string): Promise<void> {
+    try {
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, ip);
+      await pasteboard.getSystemPasteboard().setData(data);
+      this.showToast('虚拟 IP 已复制');
+    } catch (error) {
+      this.showToast(`复制失败：${String(error)}`);
+    }
   }
 
   private updateGateway(value: string): void {
