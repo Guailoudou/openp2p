@@ -1,9 +1,11 @@
 import { bundleManager } from '@kit.AbilityKit';
+import coreNative from 'libentry.so';
 
 @Component
 export struct AboutPage {
   @Consume private themeColor: string;
   @State private appVersion: string = '未知';
+  @State private localDeviceDisplayName: string = '未获取到';
 
   aboutToAppear(): void {
     try {
@@ -12,6 +14,15 @@ export struct AboutPage {
       this.appVersion = bundleInfo.versionName;
     } catch (_) {
       this.appVersion = '未知';
+    }
+    this.loadDeviceName();
+  }
+
+  private loadDeviceName(): void {
+    try {
+      this.localDeviceDisplayName = coreNative.getLocalDeviceDisplayName().trim() || '未获取到';
+    } catch (_) {
+      this.localDeviceDisplayName = '获取失败';
     }
   }
 
@@ -83,6 +94,8 @@ export struct AboutPage {
           this.infoRow($r('sys.symbol.gearshape_fill'), '核心架构', 'arm64-v8a')
           Divider().color($r('app.color.divider')).padding({ left: 18, right: 18 })
           this.infoRow($r('sys.symbol.hammer_fill'), '核心类型', 'OpenP2P Go Native')
+          Divider().color($r('app.color.divider')).padding({ left: 18, right: 18 })
+          this.infoRow($r('sys.symbol.display'), '设备显示名称', this.localDeviceDisplayName)
           Divider().color($r('app.color.divider')).padding({ left: 18, right: 18 })
           this.openSourceRow()
         }

@@ -1,5 +1,7 @@
 #include "napi/native_api.h"
+#include <distributedhardware/device_manager/oh_device_manager.h>
 #include <dlfcn.h>
+#include <cstdlib>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -100,6 +102,25 @@ static napi_value Add(napi_env env, napi_callback_info info) {
     napi_value sum;
     napi_create_double(env, left + right, &sum);
     return sum;
+}
+
+static napi_value GetLocalDeviceDisplayName(napi_env env, napi_callback_info info) {
+    (void)info;
+    char *name = nullptr;
+    unsigned int length = 0;
+    napi_value result = nullptr;
+    if (OH_DeviceManager_GetLocalDeviceName(&name, length) == 0 && name != nullptr) {
+        size_t textLength = length;
+        if (textLength > 0 && name[textLength - 1] == '\0') {
+            textLength--;
+        }
+        napi_create_string_utf8(env, name, textLength, &result);
+    }
+    std::free(name);
+    if (result == nullptr) {
+        napi_create_string_utf8(env, "", 0, &result);
+    }
+    return result;
 }
 
 static napi_value StartCore(napi_env env, napi_callback_info info) {
@@ -322,6 +343,7 @@ EXTERN_C_START
 static napi_value Init(napi_env env, napi_value exports) {
     napi_property_descriptor desc[] = {
         {"add", nullptr, Add, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"getLocalDeviceDisplayName", nullptr, GetLocalDeviceDisplayName, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"startCore", nullptr, StartCore, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"getLastError", nullptr, GetLastError, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"getCoreState", nullptr, GetCoreState, nullptr, nullptr, nullptr, napi_default, nullptr},

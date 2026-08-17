@@ -17,4 +17,4 @@ if(NOT EXISTS "${OPENP2P_LIB}")
 endif()
 
 add_library(entry SHARED napi_init.cpp)
-target_link_libraries(entry PUBLIC libace_napi.z.so libdl.a)
+target_link_libraries(entry PUBLIC libace_napi.z.so libdevicemanager_ndk.so libdl.a)
