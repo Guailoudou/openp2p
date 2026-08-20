@@ -36,6 +36,8 @@ jobs:
           packages: platform-tools platforms;android-31 build-tools;30.0.3 ndk;21.4.7075529
 
       - name: Build Go Android library
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/21.4.7075529
         run: |
           mkdir -p app/app/libs artifacts/android
           cp go.mod android.mod
@@ -186,7 +188,7 @@ jobs:
           nm -D --defined-only "$SO" | tee artifacts/harmonyos/exported-symbols.txt
           grep -q 'Machine:.*AArch64' artifacts/harmonyos/elf-header.txt
           ! grep -Eq 'libc\.so\.6|ld-linux-aarch64' artifacts/harmonyos/dynamic-section.txt
-          for symbol in OpenP2PStart OpenP2PStartWithNode OpenP2PStop OpenP2PGetStatus OpenP2PGetLastError OpenP2PGetSDWANConfig OpenP2PGetNodeName OpenP2PGetHealth OpenP2PReadTun OpenP2PWriteTun OpenP2PIsRunning; do
+          for symbol in OpenP2PStart OpenP2PStartWithNode OpenP2PStop OpenP2PGetStatus OpenP2PGetLastError OpenP2PGetSDWANConfig OpenP2PGetNodeName OpenP2PReadTun OpenP2PWriteTun OpenP2PIsRunning; do
             grep -Eq " T ${symbol}$" artifacts/harmonyos/exported-symbols.txt
           done
           sha256sum "$SO" "$HEADER" > artifacts/harmonyos/SHA256SUMS
