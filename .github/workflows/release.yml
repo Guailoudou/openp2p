@@ -53,13 +53,14 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.20'
+          go-version: '1.20.14'
 
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: '0'
+          GOTOOLCHAIN: local
           GOPROXY: https://goproxy.io,direct
         run: |
           OUTPUT_NAME="${{ env.BINARY_NAME }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
@@ -72,80 +73,6 @@ jobs:
           name: ${{ env.BINARY_NAME }}-${{ matrix.os }}-${{ matrix.arch }}
           path: ${{ env.OUTPUT_NAME }}
           retention-days: 7
-
-  # build-android:
-  #   name: Build Android APK
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v6
-  #
-  #     - name: Setup Go
-  #       uses: actions/setup-go@v5
-  #       with:
-  #         go-version: '1.23'
-  #
-  #     - name: Setup JDK
-  #       uses: actions/setup-java@v4
-  #       with:
-  #         java-version: '17'
-  #         distribution: 'temurin'
-  #
-  #     - name: Setup Android SDK & NDK
-  #       uses: android-actions/setup-android@v3
-  #       with:
-  #         packages: 'build-tools;30.0.3 ndk;21.4.7075529 platform-tools platforms;android-31'
-  #
-  #     - name: Setup Android Environment
-  #       run: |
-  #         echo "$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_PATH
-  #         echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/21.4.7075529" >> $GITHUB_ENV
-  #
-  #     - name: Build Go mobile library (gomobile bind)
-  #       env:
-  #         GOPROXY: https://goproxy.io,direct
-  #       run: |
-  #         # Install gomobile and gobind at the same pinned commit to avoid @latest resolution
-  #         go install golang.org/x/mobile/cmd/gomobile@7c4916698cc93475ebfea76748ee0faba2deb2a5
-  #         go install golang.org/x/mobile/cmd/gobind@7c4916698cc93475ebfea76748ee0faba2deb2a5
-  #         gomobile init
-  #         go get -v golang.org/x/mobile/bind@7c4916698cc93475ebfea76748ee0faba2deb2a5
-  #
-  #         cd core
-  #         gomobile bind -target android -v -androidapi 16
-  #
-  #         # Copy artifacts to app libs
-  #         mkdir -p ../app/app/libs
-  #         cp openp2p.aar openp2p-sources.jar ../app/app/libs/
-  #         echo "Go mobile library built and copied to app/app/libs/"
-  #         ls -la ../app/app/libs/
-  #
-  #     - name: Build unsigned APK
-  #       working-directory: app
-  #       run: |
-  #         chmod +x gradlew
-  #         ./gradlew assembleRelease
-  #
-  #         # Find the built APK
-  #         APK_PATH=$(find . -name "*.apk" -path "*/release/*" | head -1)
-  #         if [ -z "$APK_PATH" ]; then
-  #           APK_PATH=$(find . -name "*.apk" | head -1)
-  #         fi
-  #
-  #         if [ -n "$APK_PATH" ]; then
-  #           cp "$APK_PATH" ../openp2p-android.apk
-  #           echo "APK built: $APK_PATH"
-  #         else
-  #           echo "ERROR: No APK found"
-  #           exit 1
-  #         fi
-  #
-  #     - name: Upload APK artifact
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: openp2p-android-apk
-  #         path: openp2p-android.apk
-  #         retention-days: 7
 
   sign:
     name: Sign Artifacts (Certum SimplySign)

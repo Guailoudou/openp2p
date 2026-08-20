@@ -20,6 +20,7 @@ app/.idea/
 *_debug_bin*
 cmd/openp2p
 vendor/
+/oh.go.sum
 config.json
 openp2p
 !app/app/src/main/java/cn/openp2p/

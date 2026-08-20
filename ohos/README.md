@@ -60,7 +60,7 @@ OpenHarmony-SIG Go + OHOS Native SDK + OpenP2P Go 源码
 | HarmonyOS SDK | `6.1.1(24)` | 见 `ohos/build-profile.json5` |
 | 应用运行时 | HarmonyOS | 原生 ArkTS Stage 模型 |
 | OpenHarmony Go | `release-branch.go1.24` | 官方仓库 `ohos_golang_go` |
-| Go module | `go 1.23.1`，toolchain `go1.24.5` | 见仓库根目录 `go.mod` |
+| Go module | 普通平台 `go 1.20`；OHOS 构建临时使用 `go 1.23.1` | 见仓库根目录 `go.mod` 与第 7.2 节 |
 | Native ABI | `arm64-v8a` | 当前只提供 arm64 动态库 |
 | Go build target | `openharmony/arm64` | 不得替换为 `linux/arm64` |
 
@@ -291,10 +291,12 @@ arm64
 
 ```bash
 cd "$HOME/ohos-build/openp2p-master"
+cp go.sum oh.go.sum
+export GOFLAGS="-modfile=$PWD/oh.go.mod"
 go mod download
 ```
 
-正式构建建议使用 `-mod=readonly`，防止构建过程自动修改 `go.mod` 或 `go.sum`。
+`oh.go.mod` 固定 OHOS 构建使用的 `go 1.23.1` 语义和工具链要求；`oh.go.sum` 是构建时从根 `go.sum` 生成的临时文件。正式构建建议使用 `-mod=readonly`，防止构建过程修改依赖。普通平台仍直接使用 `go 1.20` 的根模块。
 
 ### 7.3 生成动态库
 
@@ -581,6 +583,15 @@ ohos/entry/build/default/outputs/default/entry-default-signed.hap
 ```
 
 是否生成 signed HAP 取决于本机签名配置。
+
+### 12.3 GitHub Actions 自动构建
+
+`.github/workflows/mobile.yml` 会在 `master` 推送、Pull Request 和手动触发时构建 Android 与 HarmonyOS 产物。HarmonyOS job 需要在仓库中配置：
+
+- Secret `DEVECO_COMMAND_LINE_TOOLS_URL`：华为下载中心提供的 Linux x64 Command Line Tools 直接下载地址；
+- Secret `DEVECO_COMMAND_LINE_TOOLS_SHA256`：对应压缩包的 SHA-256。
+
+Command Line Tools 必须包含 API 24 或更高版本的 HarmonyOS SDK。流水线不会读取或生成签名材料，只上传未签名 HAP、Go SO/H、`libentry.so`、校验记录及符号信息。
 
 ## 13. 检查 HAP 是否包含正确动态库
 

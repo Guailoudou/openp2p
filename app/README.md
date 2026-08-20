@@ -1,20 +1,20 @@
 ## Build
-depends on openjdk 11, gradle 8.1.3, ndk 21
+depends on Go 1.20.14, OpenJDK 17, Gradle 8.2, Android SDK 31 and NDK 21.4.7075529
 ```
 
-# latest version not support go1.20
 go install golang.org/x/mobile/cmd/gomobile@7c4916698cc93475ebfea76748ee0faba2deb2a5
+go install golang.org/x/mobile/cmd/gobind@7c4916698cc93475ebfea76748ee0faba2deb2a5
 gomobile init
-go get -v golang.org/x/mobile/bind@7c4916698cc93475ebfea76748ee0faba2deb2a5
-cd core
-gomobile bind -target android -v
+cp go.mod android.mod
+cp go.sum android.sum
+GOFLAGS="-modfile=$PWD/android.mod" go get -v golang.org/x/mobile/bind@7c4916698cc93475ebfea76748ee0faba2deb2a5
+GOFLAGS="-modfile=$PWD/android.mod" gomobile bind -target android -androidapi 16 -o app/app/libs/openp2p.aar ./core
 if [[ $? -ne 0 ]]; then
     echo "build error"
     exit 9
 fi
 echo "build ok"
-cp openp2p.aar openp2p-sources.jar ../app/app/libs
-echo "copy to APP libs"
+echo "AAR and sources JAR written to app/app/libs"
 
 edit app/app/build.gradle 
 ```
@@ -27,7 +27,7 @@ signingConfigs {
         }
     }
 ```
-cd ../app
-./gradlew build
+cd app
+./gradlew assembleRelease bundleRelease
 
 ```
