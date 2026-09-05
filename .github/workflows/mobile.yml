@@ -40,9 +40,6 @@ jobs:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/21.4.7075529
         run: |
           mkdir -p app/app/libs artifacts/android
-          cp go.mod android.mod
-          cp go.sum android.sum
-          export GOFLAGS="-modfile=$GITHUB_WORKSPACE/android.mod"
           export PATH="$(go env GOPATH)/bin:$PATH"
 
           go install "golang.org/x/mobile/cmd/gomobile@$GOMOBILE_VERSION"
