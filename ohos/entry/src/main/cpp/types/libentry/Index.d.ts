@@ -8,9 +8,15 @@ export const getCoreState: () => number;
 export const isCoreRunning: () => boolean;
 export const getCoreLastError: () => string;
 export const stopCore: () => boolean;
+export const stopCoreAsync: () => Promise<boolean>;
 export const getNodeName: () => string;
 /** JSON health: coreAlive, controlOnline, generation, lastPacketInMs, lastPacketOutMs. */
 export const getCoreHealth: () => string;
 export const getSdwanConfig: () => Promise<string>;
 export const readTun: (buffer: ArrayBuffer) => boolean;
 export const writeTun: (buffer: ArrayBuffer, timeoutMs: number) => number;
+/** Starts native worker threads that move packets between the VPN fd and Go. */
+export const startTunBridge: (fd: number) => boolean;
+export const stopTunBridge: () => boolean;
+/** 0=stopped, 1=running, 2=failed. */
+export const getTunBridgeState: () => number;

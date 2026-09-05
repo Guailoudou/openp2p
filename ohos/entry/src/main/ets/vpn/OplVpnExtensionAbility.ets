@@ -13,11 +13,7 @@ const STATUS_FILE = 'opl_core_status.json';
 const LOCK_FILE = 'vpn_ipc.lock';
 const VPN_REQUEST_FILE = 'opl_vpn_request.json';
 const CORE_CHECK_REQUEST_FILE = 'opl_core_check_request';
-const MAX_PACKET_SIZE = 64 * 1024;
-const WRITE_TIMEOUT_MS = 50;
 const VPN_INTERFACE = 'vpn-tun';
-const POLL_INTERVAL_MS = 5;
-const MAX_PACKETS_PER_TICK = 64;
 const CORE_CHECK_INTERVAL_MS = 10 * 1000;
 const CORE_CHECK_REQUEST_POLL_MS = 250;
 const CORE_FAILURE_THRESHOLD = 3;
@@ -77,8 +73,6 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
   private vpnFd: number = -1;
   private stopping: boolean = false;
   private requestId: number = 0;
-  private readBuffer: ArrayBuffer = new ArrayBuffer(MAX_PACKET_SIZE);
-  private writeBuffer: ArrayBuffer = new ArrayBuffer(MAX_PACKET_SIZE);
   private launchState?: CoreState;
   private watchdogTimer: number = -1;
   private coreCheckRequestTimer: number = -1;
@@ -107,7 +101,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
       this.writeStatus('failed', detail, this.requestId);
       hilog.error(DOMAIN, TAG, 'VPN initialization failed: %{public}s', detail);
       this.stopCoreWatchdog();
-      this.stopCore();
+      this.stopCoreAsync();
     });
   }
 
@@ -115,7 +109,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     this.stopping = true;
     this.stopCoreWatchdog();
     this.destroyVpn();
-    this.stopCore();
+    this.stopCoreAsync();
     this.removeFile(LOCK_FILE);
     this.removeFile(VPN_REQUEST_FILE);
     this.removeFile(CORE_CHECK_REQUEST_FILE);
@@ -466,7 +460,12 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     const vpnConnection = vpnExtension.createVpnConnection(this.context);
     this.connection = vpnConnection;
     try {
+      if (!coreNative.startTunBridge(this.vpnFd)) {
+        throw new Error('Unable to start native TUN bridge');
+      }
       await vpnConnection.protectProcessNet();
+      coreNative.stopTunBridge();
+      this.vpnFd = -1;
       this.vpnFd = await vpnConnection.create(config);
     } catch (error) {
       this.connection = undefined;
@@ -483,8 +482,6 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     hilog.info(DOMAIN, TAG, 'OHOS VPN interface created or refreshed, fd=%{public}d generation=%{public}d',
       this.vpnFd, generation);
     this.writeStatus('vpn_ready', '核心已连接，SD-WAN 接口已就绪', this.requestId);
-    this.readLoop(generation);
-    this.writeLoop(generation);
     return true;
   }
 
@@ -597,69 +594,6 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     return octets.join('.');
   }
 
-  private readLoop(generation: number): void {
-    if (this.stopping || this.vpnFd < 0 || generation !== this.vpnGeneration) {
-      return;
-    }
-    let packetsRead = 0;
-    try {
-      while (packetsRead < MAX_PACKETS_PER_TICK) {
-        const length = fileIo.readSync(this.vpnFd, this.readBuffer, { length: MAX_PACKET_SIZE, offset: 0 });
-        if (length <= 0) {
-          break;
-        }
-        coreNative.readTun(this.readBuffer.slice(0, length));
-        packetsRead++;
-      }
-    } catch (error) {
-      // A non-blocking VPN fd reports EAGAIN while there is no packet. That
-      // is normal; only terminate the bridge for a real descriptor failure.
-      if (!this.isWouldBlock(error as Object)) {
-        hilog.error(DOMAIN, TAG, 'VPN read failed: %{public}s', JSON.stringify(error));
-        this.recoverVpn(generation, this.formatError(error as Object)).catch((recoveryError: Object) => {
-          hilog.error(DOMAIN, TAG, 'VPN read recovery failed: %{public}s', this.formatError(recoveryError));
-        });
-      }
-    }
-    if (!this.stopping && generation === this.vpnGeneration) {
-      setTimeout((): void => this.readLoop(generation),
-        packetsRead === MAX_PACKETS_PER_TICK ? 0 : POLL_INTERVAL_MS);
-    }
-  }
-
-  private writeLoop(generation: number): void {
-    if (this.stopping || this.vpnFd < 0 || generation !== this.vpnGeneration) {
-      return;
-    }
-    let packetsWritten = 0;
-    try {
-      while (packetsWritten < MAX_PACKETS_PER_TICK) {
-        const length = coreNative.writeTun(this.writeBuffer, packetsWritten === 0 ? WRITE_TIMEOUT_MS : 1);
-        if (length <= 0) {
-          break;
-        }
-        fileIo.writeSync(this.vpnFd, this.writeBuffer, { length, offset: 0 });
-        packetsWritten++;
-      }
-    } catch (error) {
-      if (!this.isWouldBlock(error as Object)) {
-        hilog.error(DOMAIN, TAG, 'VPN write failed: %{public}s', JSON.stringify(error));
-        this.recoverVpn(generation, this.formatError(error as Object)).catch((recoveryError: Object) => {
-          hilog.error(DOMAIN, TAG, 'VPN write recovery failed: %{public}s', this.formatError(recoveryError));
-        });
-      }
-    }
-    if (!this.stopping && generation === this.vpnGeneration) {
-      setTimeout((): void => this.writeLoop(generation),
-        packetsWritten === MAX_PACKETS_PER_TICK ? 0 : POLL_INTERVAL_MS);
-    }
-  }
-
-  private isWouldBlock(error: Object): boolean {
-    const serialized = JSON.stringify(error);
-    return serialized.includes('13900034') || serialized.includes('13900010');
-  }
-
   private async recoverVpn(generation: number, detail: string): Promise<void> {
     if (this.stopping || this.vpnRecoveryInProgress || generation !== this.vpnGeneration ||
         this.lastVpnConfig === undefined) {
@@ -743,6 +677,12 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
 
   private checkCoreLiveness(): void {
     if (this.stopping || this.recoveryInProgress || this.foregroundCheckInProgress) {
+    if (this.vpnFd >= 0 && coreNative.getTunBridgeState() !== 1) {
+      this.recoverVpn(this.vpnGeneration, 'Native TUN bridge stopped').catch((error: Object) => {
+        hilog.error(DOMAIN, TAG, 'Native TUN bridge recovery failed: %{public}s', this.formatError(error));
+      });
+      return;
+    }
       return;
     }
     if (this.isNativeCoreRunning()) {
@@ -835,7 +775,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
         return;
       }
 
-      this.stopCore();
+      await this.stopCoreAsync();
       await this.sleep(250);
       const state = this.launchState;
       const started = coreNative.startCore(
@@ -876,7 +816,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     this.stopping = true;
     this.stopCoreWatchdog();
     this.destroyVpn();
-    this.stopCore();
+    this.stopCoreAsync();
     this.removeFile(LOCK_FILE);
     this.removeFile(VPN_REQUEST_FILE);
     this.writeStatus('recovery_exhausted', '10 分钟内已恢复 5 次，自动恢复暂时停止', this.requestId);
@@ -886,6 +826,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
   private async destroyVpn(): Promise<void> {
     if (this.vpnFd < 0 && this.connection === undefined) {
       return;
+    coreNative.stopTunBridge();
     }
     this.vpnGeneration++;
     if (this.vpnFd >= 0) {
@@ -907,9 +848,9 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     }
   }
 
-  private stopCore(): void {
+  private async stopCoreAsync(): Promise<void> {
     try {
-      coreNative.stopCore();
+      await coreNative.stopCoreAsync();
     } catch (error) {
       hilog.error(DOMAIN, TAG, 'Unable to stop OpenP2P core: %{public}s', JSON.stringify(error));
     }
