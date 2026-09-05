@@ -89,7 +89,7 @@ export class BackgroundLocationService {
     try {
       const request: geoLocationManager.ContinuousLocationRequest = {
         interval: BACKGROUND_LOCATION_INTERVAL_SECONDS,
-        locationScenario: geoLocationManager.PowerConsumptionScenario.LOW_POWER_CONSUMPTION
+        locationScenario: geoLocationManager.PowerConsumptionScenario.NO_POWER_CONSUMPTION
       };
       geoLocationManager.on('locationChange', request, BackgroundLocationService.locationCallback);
       BackgroundLocationService.active = true;
