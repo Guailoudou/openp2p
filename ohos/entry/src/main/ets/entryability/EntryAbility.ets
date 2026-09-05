@@ -10,9 +10,12 @@ import { CoreService } from '../service/CoreService';
 import { AppColorMode, RuntimeStateStore } from '../service/RuntimeStateStore';
 
 const DOMAIN = 0x0000;
+const BACKGROUND_RECOVERY_INTERVAL_MS = 10 * 1000;
 
 export default class EntryAbility extends UIAbility {
   private coreService?: CoreService;
+  private backgroundRecoveryTimer: number = 0;
+  private recovering: boolean = false;
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     this.coreService = new CoreService(this.context);
@@ -20,6 +23,7 @@ export default class EntryAbility extends UIAbility {
   }
 
   onDestroy(): void {
+    this.stopBackgroundRecovery();
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onDestroy');
   }
 
@@ -60,6 +64,7 @@ export default class EntryAbility extends UIAbility {
 
   onForeground(): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
+    this.stopBackgroundRecovery();
     this.coreService?.onAppForeground().catch((error: Object) => {
       hilog.warn(DOMAIN, 'testTag', 'Foreground core check failed: %{public}s', JSON.stringify(error));
     });
@@ -67,8 +72,35 @@ export default class EntryAbility extends UIAbility {
 
   onBackground(): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
+    this.startBackgroundRecovery();
     this.coreService?.onAppBackground().catch((error: Object) => {
-      hilog.warn(DOMAIN, 'testTag', 'Unable to start PiP on background: %{public}s', JSON.stringify(error));
+      hilog.warn(DOMAIN, 'testTag', 'Unable to start background strategies: %{public}s', JSON.stringify(error));
     });
+  }
+
+  private startBackgroundRecovery(): void {
+    if (this.backgroundRecoveryTimer !== 0) {
+      return;
+    }
+    this.backgroundRecoveryTimer = setInterval((): void => {
+      if (this.recovering) {
+        return;
+      }
+      this.recovering = true;
+      this.coreService?.recoverIfNeeded()
+        .catch((error: Object): void => {
+          hilog.warn(DOMAIN, 'testTag', 'Background recovery failed: %{public}s', JSON.stringify(error));
+        })
+        .finally((): void => {
+          this.recovering = false;
+        });
+    }, BACKGROUND_RECOVERY_INTERVAL_MS);
+  }
+
+  private stopBackgroundRecovery(): void {
+    if (this.backgroundRecoveryTimer !== 0) {
+      clearInterval(this.backgroundRecoveryTimer);
+      this.backgroundRecoveryTimer = 0;
+    }
   }
 }

@@ -30,6 +30,7 @@ interface CoreLaunchState {
 }
 
 export class CoreService {
+  private static appInBackground: boolean = false;
   private context: common.UIAbilityContext;
   private requestId: number = 0;
   private tokenStore: TokenStore = new TokenStore();
@@ -86,20 +87,17 @@ export class CoreService {
     return this.runtimeStateStore.isSimulatedLocationEnabled();
   }
 
-  isSimulatedDownloadEnabled(): boolean {
-    return this.runtimeStateStore.isSimulatedDownloadEnabled();
-  }
-
   isPictureInPictureEnabled(): boolean {
     return this.runtimeStateStore.isPictureInPictureEnabled();
   }
 
   async setBackgroundKeepAliveEnabled(enabled: boolean): Promise<boolean> {
     this.runtimeStateStore.setBackgroundKeepAliveEnabled(enabled);
-    if (!this.isCoreActive()) {
-      return true;
+    const available = !enabled || await this.backgroundKeepAlive.requestNotificationPermission();
+    if (!CoreService.appInBackground || !this.isCoreActive()) {
+      return available;
     }
-    return this.applyBackgroundStrategies();
+    return available && await this.applyBackgroundStrategies();
   }
 
   async setSimulatedLocationEnabled(enabled: boolean): Promise<boolean> {
@@ -108,16 +106,7 @@ export class CoreService {
     if (!enabled) {
       this.backgroundLocation.stop();
     }
-    if (this.isCoreActive()) {
-      await this.applyBackgroundStrategies();
-    }
-    return available;
-  }
-
-  async setSimulatedDownloadEnabled(enabled: boolean): Promise<boolean> {
-    this.runtimeStateStore.setSimulatedDownloadEnabled(enabled);
-    const available = !enabled || await this.backgroundKeepAlive.requestNotificationPermission();
-    if (this.isCoreActive()) {
+    if (CoreService.appInBackground && this.isCoreActive()) {
       await this.applyBackgroundStrategies();
     }
     return available;
@@ -138,6 +127,9 @@ export class CoreService {
   }
 
   async onAppForeground(): Promise<void> {
+    CoreService.appInBackground = false;
+    this.backgroundLocation.stop();
+    await this.backgroundKeepAlive.stop();
     await this.pictureInPicture.stopForForeground();
     if (!this.runtimeStateStore.isDesiredRunning()) {
       this.removeFile(CORE_CHECK_REQUEST_FILE);
@@ -148,12 +140,6 @@ export class CoreService {
       return;
     }
     const foregroundStatus = this.readStatus();
-    if (foregroundStatus.state === 'failed' || foregroundStatus.state === 'recovery_exhausted') {
-      this.runtimeStateStore.setDesiredRunning(false);
-      this.removeFile(CORE_CHECK_REQUEST_FILE);
-      this.writeStatus('not_started', '核心尚未启动');
-      return;
-    }
     this.writeText(CORE_CHECK_REQUEST_FILE, String(Date.now()));
     // The VPN extension polls this file every 250 ms. If the request remains,
     // its process and watchdog are no longer alive, regardless of a fresh
@@ -169,6 +155,10 @@ export class CoreService {
   }
 
   async onAppBackground(): Promise<void> {
+    CoreService.appInBackground = true;
+    if (this.isCoreActive()) {
+      await this.applyBackgroundStrategies();
+    }
     if (this.isCoreActive() && this.runtimeStateStore.isPictureInPictureEnabled()) {
       await this.pictureInPicture.startForBackground();
     }
@@ -208,7 +198,6 @@ export class CoreService {
       });
     } catch (error) {
       const detail = this.formatError(error);
-      this.runtimeStateStore.setDesiredRunning(false);
       this.writeStatus('failed', detail);
       throw new Error(`无法启动 VPN 扩展：${detail}`);
     }
@@ -216,19 +205,22 @@ export class CoreService {
     const coreReady = await this.waitForCoreReady();
     if (!coreReady) {
       const status = this.readStatus();
-      this.runtimeStateStore.setDesiredRunning(false);
       throw new Error(status.message.length > 0 ? status.message : '等待 OpenP2P 核心启动超时');
     }
 
     const status = this.readStatus();
     if (status.state === 'vpn_ready' || status.state === 'vpn_waiting_config' ||
       status.state === 'vpn_requested' || status.state === 'vpn_starting') {
-      await this.applyBackgroundStrategies();
+      if (CoreService.appInBackground) {
+        await this.applyBackgroundStrategies();
+      }
       return;
     }
     this.writeText(VPN_REQUEST_FILE, JSON.stringify({ action: 'start', requestId: this.requestId }));
     this.writeStatus('vpn_requested', '正在请求创建 VPN 网络接口');
-    await this.applyBackgroundStrategies();
+    if (CoreService.appInBackground) {
+      await this.applyBackgroundStrategies();
+    }
   }
 
   async stop(): Promise<void> {
@@ -258,7 +250,9 @@ export class CoreService {
     const status = this.readStatus();
     const age = status.timestamp > 0 ? Date.now() - status.timestamp : Number.MAX_SAFE_INTEGER;
     if (!force && this.isRunningState(status.state) && age <= HEARTBEAT_STALE_MS) {
-      await this.applyBackgroundStrategies();
+      if (CoreService.appInBackground) {
+        await this.applyBackgroundStrategies();
+      }
       return false;
     }
     if (status.state === 'recovery_exhausted' && age < RECOVERY_COOLDOWN_MS) {
@@ -296,14 +290,21 @@ export class CoreService {
   }
 
   private async applyBackgroundStrategies(): Promise<boolean> {
+    if (!CoreService.appInBackground) {
+      return true;
+    }
     const locationEnabled = this.runtimeStateStore.isSimulatedLocationEnabled();
     this.pictureInPicture.setEnabled(this.runtimeStateStore.isPictureInPictureEnabled());
     const options: BackgroundKeepAliveOptions = {
       continuousTask: this.runtimeStateStore.isBackgroundKeepAliveEnabled(),
-      simulatedLocation: locationEnabled,
-      simulatedDownload: this.runtimeStateStore.isSimulatedDownloadEnabled()
+      simulatedLocation: locationEnabled
     };
     const continuousTaskAvailable = await this.backgroundKeepAlive.configure(options);
+    if (!CoreService.appInBackground) {
+      await this.backgroundKeepAlive.stop();
+      this.backgroundLocation.stop();
+      return false;
+    }
     // A location subscription created before the location continuous task is
     // active is treated as foreground-only and is suspended in background.
     const locationAvailable = locationEnabled ?

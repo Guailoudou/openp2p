@@ -30,7 +30,6 @@ struct Index {
   @State private managementAddTime: string = '';
   @State private backgroundKeepAliveEnabled: boolean = true;
   @State private simulatedLocationEnabled: boolean = false;
-  @State private simulatedDownloadEnabled: boolean = false;
   @State private pictureInPictureEnabled: boolean = false;
   @State private colorMode: AppColorMode = AppColorMode.SYSTEM;
   @State private appTheme: CustomTheme = new OpenP2PTheme(DEFAULT_THEME_COLOR);
@@ -54,7 +53,6 @@ struct Index {
     this.controller = new OpenP2PController(context, this.state, uiContext);
     this.backgroundKeepAliveEnabled = this.controller.isBackgroundKeepAliveEnabled();
     this.simulatedLocationEnabled = this.controller.isSimulatedLocationEnabled();
-    this.simulatedDownloadEnabled = this.controller.isSimulatedDownloadEnabled();
     this.pictureInPictureEnabled = this.controller.isPictureInPictureEnabled();
     this.controller.initializePictureInPicture(uiContext).catch((error: Object): void => {
       hilog.warn(DOMAIN, TAG, 'Unable to initialize PiP: %{public}s', JSON.stringify(error));
@@ -256,14 +254,6 @@ struct Index {
     return changed;
   }
 
-  private async setSimulatedDownloadEnabled(enabled: boolean): Promise<boolean> {
-    const changed = await this.controller?.setSimulatedDownloadEnabled(enabled) === true;
-    if (changed) {
-      this.simulatedDownloadEnabled = enabled;
-    }
-    return changed;
-  }
-
   private async setPictureInPictureEnabled(enabled: boolean): Promise<boolean> {
     const changed = await this.controller?.setPictureInPictureEnabled(enabled, this.getUIContext()) === true;
     if (changed) {
@@ -282,7 +272,6 @@ struct Index {
       managementAddTime: this.managementAddTime,
       backgroundKeepAliveEnabled: this.backgroundKeepAliveEnabled,
       simulatedLocationEnabled: this.simulatedLocationEnabled,
-      simulatedDownloadEnabled: this.simulatedDownloadEnabled,
       pictureInPictureEnabled: this.pictureInPictureEnabled,
       colorMode: this.colorMode,
       onSaveManagementCredentials: async (username: string, password: string): Promise<boolean> =>
@@ -294,8 +283,6 @@ struct Index {
         this.setBackgroundKeepAliveEnabled(enabled),
       onSimulatedLocationChange: async (enabled: boolean): Promise<boolean> =>
         this.setSimulatedLocationEnabled(enabled),
-      onSimulatedDownloadChange: async (enabled: boolean): Promise<boolean> =>
-        this.setSimulatedDownloadEnabled(enabled),
       onPictureInPictureChange: async (enabled: boolean): Promise<boolean> =>
         this.setPictureInPictureEnabled(enabled),
       onThemeColorChange: (color: string): void => this.applyThemeColor(color),

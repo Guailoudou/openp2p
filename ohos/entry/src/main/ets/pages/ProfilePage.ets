@@ -21,7 +21,6 @@ export struct ProfilePage {
   @State private savingBackgroundSetting: boolean = false;
   @State private localBackgroundKeepAliveEnabled: boolean = true;
   @State private localSimulatedLocationEnabled: boolean = false;
-  @State private localSimulatedDownloadEnabled: boolean = false;
   @State private localPictureInPictureEnabled: boolean = false;
   @Prop managementUsername: string = '';
   @Prop managementAuthenticated: boolean = false;
@@ -30,7 +29,6 @@ export struct ProfilePage {
   @Prop managementAddTime: string = '';
   @Prop backgroundKeepAliveEnabled: boolean = true;
   @Prop simulatedLocationEnabled: boolean = false;
-  @Prop simulatedDownloadEnabled: boolean = false;
   @Prop pictureInPictureEnabled: boolean = false;
   @Prop colorMode: string = AppColorMode.SYSTEM;
   onSaveManagementCredentials: (username: string, password: string) => Promise<boolean> =
@@ -41,8 +39,6 @@ export struct ProfilePage {
   onBackgroundKeepAliveChange: (enabled: boolean) => Promise<boolean> =
     async (_enabled: boolean): Promise<boolean> => false;
   onSimulatedLocationChange: (enabled: boolean) => Promise<boolean> =
-    async (_enabled: boolean): Promise<boolean> => false;
-  onSimulatedDownloadChange: (enabled: boolean) => Promise<boolean> =
     async (_enabled: boolean): Promise<boolean> => false;
   onPictureInPictureChange: (enabled: boolean) => Promise<boolean> =
     async (_enabled: boolean): Promise<boolean> => false;
@@ -57,7 +53,6 @@ export struct ProfilePage {
   private syncBackgroundSettingState(): void {
     this.localBackgroundKeepAliveEnabled = this.backgroundKeepAliveEnabled;
     this.localSimulatedLocationEnabled = this.simulatedLocationEnabled;
-    this.localSimulatedDownloadEnabled = this.simulatedDownloadEnabled;
     this.localPictureInPictureEnabled = this.pictureInPictureEnabled;
   }
 
@@ -90,23 +85,6 @@ export struct ProfilePage {
       }
     } catch (_) {
       this.localSimulatedLocationEnabled = !enabled;
-    } finally {
-      this.savingBackgroundSetting = false;
-    }
-  }
-
-  private async changeSimulatedDownload(enabled: boolean): Promise<void> {
-    if (this.savingBackgroundSetting) {
-      return;
-    }
-    this.localSimulatedDownloadEnabled = enabled;
-    this.savingBackgroundSetting = true;
-    try {
-      if (!await this.onSimulatedDownloadChange(enabled)) {
-        this.localSimulatedDownloadEnabled = !enabled;
-      }
-    } catch (_) {
-      this.localSimulatedDownloadEnabled = !enabled;
     } finally {
       this.savingBackgroundSetting = false;
     }
@@ -151,17 +129,6 @@ export struct ProfilePage {
             .enabled(!this.savingBackgroundSetting)
             .onChange((enabled: boolean): void => {
             this.changeSimulatedLocation(enabled);
-          })
-        }
-        .width('100%').padding(16).backgroundColor($r('app.color.card_background')).borderRadius(16)
-
-        Row({ space: 14 }) {
-          this.backgroundSettingLabel($r('sys.symbol.circle_and_arrow_down'), '模拟下载', '使用数据传输实况通知')
-          Toggle({ type: ToggleType.Switch, isOn: $$this.localSimulatedDownloadEnabled })
-            .selectedColor(this.themeColor)
-            .enabled(!this.savingBackgroundSetting)
-            .onChange((enabled: boolean): void => {
-            this.changeSimulatedDownload(enabled);
           })
         }
         .width('100%').padding(16).backgroundColor($r('app.color.card_background')).borderRadius(16)
@@ -606,7 +573,7 @@ export struct ProfilePage {
                 .fontSize(17)
                 .fontWeight(FontWeight.Medium)
                 .fontColor($r('app.color.text_primary'))
-              Text('持续任务、定位、下载与画中画设置')
+              Text('持续任务、定位与画中画设置')
                 .fontSize(13)
                 .fontColor($r('app.color.text_secondary'))
             }

@@ -1,31 +1,34 @@
 import { notificationManager } from '@kit.NotificationKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import common from '@ohos.app.ability.common';
+import { CoreStatusStore } from './CoreStatusStore';
 
 const DOMAIN = 0x0;
 const TAG = 'OpenP2P-Download';
-const INITIAL_PROGRESS = 5;
-const RECREATE_PROGRESS = 90;
-const PROGRESS_UPDATE_INTERVAL_MS = 15 * 1000;
-const DOWNLOAD_NOTIFICATION_IDS: number[] = [41001, 41002];
+const INITIAL_PROGRESS = 1;
+const MAX_PROGRESS = 90;
+const UPDATES_PER_PROGRESS = 6;
+const PROGRESS_UPDATE_INTERVAL_MS = 10 * 1000;
+
 
 export class BackgroundDownloadNotifier {
-  private notificationIndex: number = 0;
+  private notificationId: number = -1;
+  private context?: common.Context;
   private progress: number = INITIAL_PROGRESS;
+  private progressUpdateCount: number = 0;
   private timer: number = 0;
-  private taskSequence: number = 1;
   private running: boolean = false;
   private updating: boolean = false;
 
-  async start(): Promise<void> {
+  async start(notificationId: number, context: common.Context): Promise<void> {
+    this.context = context;
     this.running = true;
-    this.notificationIndex = 0;
+    this.notificationId = notificationId;
     this.progress = INITIAL_PROGRESS;
-    this.taskSequence = 1;
+    this.progressUpdateCount = 0;
     if (this.timer !== 0) {
       clearInterval(this.timer);
     }
-    await this.cancelNotification(DOWNLOAD_NOTIFICATION_IDS[0]);
-    await this.cancelNotification(DOWNLOAD_NOTIFICATION_IDS[1]);
     await this.publishProgress();
     this.timer = setInterval((): void => {
       this.advanceProgress();
@@ -38,8 +41,7 @@ export class BackgroundDownloadNotifier {
       clearInterval(this.timer);
       this.timer = 0;
     }
-    await this.cancelNotification(DOWNLOAD_NOTIFICATION_IDS[0]);
-    await this.cancelNotification(DOWNLOAD_NOTIFICATION_IDS[1]);
+    this.notificationId = -1;
   }
 
   private async advanceProgress(): Promise<void> {
@@ -48,66 +50,73 @@ export class BackgroundDownloadNotifier {
     }
     this.updating = true;
     try {
-      this.progress++;
-      await this.publishProgress();
-      if (this.progress >= RECREATE_PROGRESS) {
-        await this.recreateDownloadTask();
+      if (this.progress < MAX_PROGRESS) {
+        this.progressUpdateCount++;
+        if (this.progressUpdateCount >= UPDATES_PER_PROGRESS) {
+          this.progress++;
+          this.progressUpdateCount = 0;
+        }
       }
+      await this.publishProgress();
     } finally {
       this.updating = false;
     }
   }
 
-  private async recreateDownloadTask(): Promise<void> {
-    const previousId = DOWNLOAD_NOTIFICATION_IDS[this.notificationIndex];
-    await this.cancelNotification(previousId);
-    if (!this.running) {
-      return;
+  private connectionText(): string {
+    try {
+      if (this.context === undefined) {
+        return '连接状态获取中';
+      }
+      const status = CoreStatusStore.read(this.context);
+      const now = Date.now();
+      const since = status.connectedSince ?? 0;
+      if (status.state !== 'vpn_ready' || since <= 0 || now - (status.timestamp ?? 0) > 35 * 1000) {
+        return 'VPN 未连接';
+      }
+      const seconds = Math.max(0, Math.floor((now - since) / 1000));
+      const hours = String(Math.floor(seconds / 3600)).padStart(2, '0');
+      const minutes = String(Math.floor(seconds / 60) % 60).padStart(2, '0');
+      const remainder = String(seconds % 60).padStart(2, '0');
+      return `已连接 ${hours}:${minutes}:${remainder}`;
+    } catch (_) {
+      return '连接状态获取中';
     }
-    this.notificationIndex = (this.notificationIndex + 1) % DOWNLOAD_NOTIFICATION_IDS.length;
-    this.progress = INITIAL_PROGRESS;
-    this.taskSequence++;
-    await this.publishProgress();
   }
 
   private async publishProgress(): Promise<void> {
-    if (!this.running) {
+    if (!this.running || this.notificationId < 0) {
       return;
     }
     try {
       if (!await notificationManager.isSupportTemplate('downloadTemplate')) {
         return;
       }
+      const connectionText = this.connectionText();
       const template: notificationManager.NotificationTemplate = {
         name: 'downloadTemplate',
         data: {
-          title: 'OpenP2P 数据通道运行中',
-          fileName: `后台连接数据传输 #${this.taskSequence}`,
+          title: 'OpenP2P',
+          fileName: connectionText,
           progressValue: this.progress
         }
       };
       const request: notificationManager.NotificationRequest = {
-        id: DOWNLOAD_NOTIFICATION_IDS[this.notificationIndex],
+        id: this.notificationId,
+        notificationSlotType: notificationManager.SlotType.LIVE_VIEW,
         template,
         content: {
-          notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
-          normal: {
+          notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_SYSTEM_LIVE_VIEW,
+          systemLiveView: {
+            typeCode: 8,
             title: 'OpenP2P',
-            text: '后台连接数据传输中'
+            text: connectionText
           }
         }
       };
       await notificationManager.publish(request);
     } catch (error) {
       hilog.warn(DOMAIN, TAG, 'Unable to update download live view: %{public}s', JSON.stringify(error));
-    }
-  }
-
-  private async cancelNotification(notificationId: number): Promise<void> {
-    try {
-      await notificationManager.cancel(notificationId);
-    } catch (_) {
-      // A task may already have been removed by the system or the user.
     }
   }
 }

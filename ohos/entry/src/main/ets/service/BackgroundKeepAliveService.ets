@@ -12,17 +12,26 @@ const ENTRY_ABILITY = 'EntryAbility';
 export interface BackgroundKeepAliveOptions {
   continuousTask: boolean;
   simulatedLocation: boolean;
-  simulatedDownload: boolean;
 }
 
 export class BackgroundKeepAliveService {
   private static active: boolean = false;
   private static activeModes: string = '';
-  private context: common.UIAbilityContext;
   private static downloadNotifier: BackgroundDownloadNotifier = new BackgroundDownloadNotifier();
+  private static cancelListenerRegistered: boolean = false;
+  private context: common.UIAbilityContext;
 
   constructor(context: common.UIAbilityContext) {
     this.context = context;
+    if (!BackgroundKeepAliveService.cancelListenerRegistered) {
+      backgroundTaskManager.on('continuousTaskCancel',
+        (_info: backgroundTaskManager.ContinuousTaskCancelInfo): void => {
+          BackgroundKeepAliveService.active = false;
+          BackgroundKeepAliveService.activeModes = '';
+          BackgroundKeepAliveService.downloadNotifier.stop();
+        });
+      BackgroundKeepAliveService.cancelListenerRegistered = true;
+    }
   }
 
   async requestNotificationPermission(): Promise<boolean> {
@@ -44,13 +53,10 @@ export class BackgroundKeepAliveService {
   async configure(options: BackgroundKeepAliveOptions): Promise<boolean> {
     const modes: string[] = [];
     if (options.continuousTask) {
-      modes.push('multiDeviceConnection');
+      modes.push('dataTransfer');
     }
     if (options.simulatedLocation) {
       modes.push('location');
-    }
-    if (options.simulatedDownload) {
-      modes.push('dataTransfer');
     }
     if (modes.length === 0) {
       await this.stop();
@@ -62,7 +68,10 @@ export class BackgroundKeepAliveService {
         if (BackgroundKeepAliveService.activeModes === signature) {
           return true;
         }
-        await backgroundTaskManager.updateBackgroundRunning(this.context, modes);
+        const notification = await backgroundTaskManager.updateBackgroundRunning(this.context, modes);
+        if (modes.includes('dataTransfer')) {
+          await BackgroundKeepAliveService.downloadNotifier.start(notification.notificationId, this.context);
+        }
       } else {
         const agent = await wantAgent.getWantAgent({
           wants: [{
@@ -74,13 +83,14 @@ export class BackgroundKeepAliveService {
           requestCode: 0,
           wantAgentFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
         });
-        await backgroundTaskManager.startBackgroundRunning(this.context, modes, agent);
+        const notification = await backgroundTaskManager.startBackgroundRunning(this.context, modes, agent);
+        if (modes.includes('dataTransfer')) {
+          await BackgroundKeepAliveService.downloadNotifier.start(notification.notificationId, this.context);
+        }
       }
       BackgroundKeepAliveService.active = true;
       BackgroundKeepAliveService.activeModes = signature;
-      if (options.simulatedDownload) {
-        await BackgroundKeepAliveService.downloadNotifier.start();
-      } else {
+      if (!modes.includes('dataTransfer')) {
         await BackgroundKeepAliveService.downloadNotifier.stop();
       }
       hilog.info(DOMAIN, TAG, 'Continuous background task configured: %{public}s', signature);

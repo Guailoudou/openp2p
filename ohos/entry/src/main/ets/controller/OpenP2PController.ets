@@ -104,10 +104,6 @@ export class OpenP2PController {
     return this.service.isSimulatedLocationEnabled();
   }
 
-  isSimulatedDownloadEnabled(): boolean {
-    return this.service.isSimulatedDownloadEnabled();
-  }
-
   isPictureInPictureEnabled(): boolean {
     return this.service.isPictureInPictureEnabled();
   }
@@ -133,16 +129,6 @@ export class OpenP2PController {
       return true;
     }
     this.showToast(enabled ? '模拟定位已开启，请在系统设置中选择“始终允许”' : '模拟定位保活已关闭');
-    return true;
-  }
-
-  async setSimulatedDownloadEnabled(enabled: boolean): Promise<boolean> {
-    const available = await this.service.setSimulatedDownloadEnabled(enabled);
-    if (!available && enabled) {
-      this.showToast('设置已保存，开启通知权限后生效');
-      return true;
-    }
-    this.showToast(enabled ? '模拟下载保活已开启' : '模拟下载保活已关闭');
     return true;
   }
 

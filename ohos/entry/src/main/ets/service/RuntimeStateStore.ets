@@ -13,7 +13,6 @@ interface RuntimeState {
   desiredRunning: boolean;
   backgroundKeepAliveEnabled?: boolean;
   simulatedLocationEnabled?: boolean;
-  simulatedDownloadEnabled?: boolean;
   pictureInPictureEnabled?: boolean;
   themeColor?: string;
   colorMode?: AppColorMode;
@@ -36,10 +35,6 @@ export class RuntimeStateStore {
 
   isSimulatedLocationEnabled(): boolean {
     return this.readState().simulatedLocationEnabled === true;
-  }
-
-  isSimulatedDownloadEnabled(): boolean {
-    return this.readState().simulatedDownloadEnabled === true;
   }
 
   isPictureInPictureEnabled(): boolean {
@@ -72,12 +67,6 @@ export class RuntimeStateStore {
     this.writeState(state);
   }
 
-  setSimulatedDownloadEnabled(enabled: boolean): void {
-    const state = this.readState();
-    state.simulatedDownloadEnabled = enabled;
-    this.writeState(state);
-  }
-
   setPictureInPictureEnabled(enabled: boolean): void {
     const state = this.readState();
     state.pictureInPictureEnabled = enabled;
@@ -107,7 +96,6 @@ export class RuntimeStateStore {
         desiredRunning: state.desiredRunning === true,
         backgroundKeepAliveEnabled: state.backgroundKeepAliveEnabled !== false,
         simulatedLocationEnabled: state.simulatedLocationEnabled === true,
-        simulatedDownloadEnabled: state.simulatedDownloadEnabled === true,
         pictureInPictureEnabled: state.pictureInPictureEnabled === true,
         themeColor: state.themeColor ?? '#0A59F7',
         colorMode: state.colorMode === AppColorMode.DARK || state.colorMode === AppColorMode.LIGHT ?
@@ -123,7 +111,6 @@ export class RuntimeStateStore {
       desiredRunning: false,
       backgroundKeepAliveEnabled: true,
       simulatedLocationEnabled: false,
-      simulatedDownloadEnabled: false,
       pictureInPictureEnabled: false,
       themeColor: '#0A59F7',
       colorMode: AppColorMode.SYSTEM
