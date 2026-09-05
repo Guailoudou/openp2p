@@ -57,7 +57,7 @@ func (oConn *overlayConn) run() {
 	overlayHead := new(bytes.Buffer)
 
 	binary.Write(overlayHead, binary.LittleEndian, oConn.id)
-	for oConn.running && oConn.app.running {
+	for oConn.running && oConn.app.running.Load() {
 		readBuff, dataLen, err := oConn.Read(reuseBuff)
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Timeout() {

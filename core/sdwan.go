@@ -207,12 +207,18 @@ func (s *p2pSDWAN) run() {
 	})
 }
 
-func (s *p2pSDWAN) readNodeLoop() {
+func (s *p2pSDWAN) readNodeLoop(tun *optun) {
 	gLog.d("sdwan readNodeLoop start")
 	defer gLog.d("sdwan readNodeLoop end")
+	defer tun.loops.Done()
 	writeBuff := make([][]byte, 1)
 	for {
-		nd := GNetwork.ReadNode(time.Second * 10) // TODO: read multi packet
+		select {
+		case <-tun.stopped():
+			return
+		default:
+		}
+		nd := GNetwork.ReadNode(time.Second) // TODO: read multi packet
 		if nd == nil {
 			gLog.dev("waiting for node data")
 			continue
@@ -227,7 +233,7 @@ func (s *p2pSDWAN) readNodeLoop() {
 			copy(writeBuff[0][PIHeaderSize:], nd)
 		}
 
-		len, err := s.tun.Write(writeBuff, PIHeaderSize)
+		len, err := tun.Write(writeBuff, PIHeaderSize)
 		if err != nil {
 			gLog.d("write tun dst ip=%s,len=%d,error:%s", net.IP{byte(head.dst >> 24), byte(head.dst >> 16), byte(head.dst >> 8), byte(head.dst)}.String(), len, err)
 		}
@@ -261,9 +267,10 @@ func (s *p2pSDWAN) routeTunPacket(p []byte, head *PacketHeader) {
 	}
 }
 
-func (s *p2pSDWAN) readTunLoop() {
+func (s *p2pSDWAN) readTunLoop(tun *optun) {
 	gLog.d("sdwan readTunLoop start")
 	defer gLog.d("sdwan readTunLoop end")
+	defer tun.loops.Done()
 	readBuff := make([][]byte, ReadTunBuffNum)
 	for i := 0; i < ReadTunBuffNum; i++ {
 		readBuff[i] = make([]byte, ReadTunBuffSize+PIHeaderSize)
@@ -271,7 +278,7 @@ func (s *p2pSDWAN) readTunLoop() {
 	readBuffSize := make([]int, ReadTunBuffNum)
 	ih := PacketHeader{}
 	for {
-		n, err := s.tun.Read(readBuff, readBuffSize, PIHeaderSize)
+		n, err := tun.Read(readBuff, readBuffSize, PIHeaderSize)
 		if err != nil {
 			gLog.e("read tun fail: %s", err)
 			return
@@ -291,7 +298,7 @@ func (s *p2pSDWAN) readTunLoop() {
 func (s *p2pSDWAN) StartTun() error {
 	sdwan := gConf.getSDWAN()
 	if s.tun == nil {
-		tun := &optun{}
+		tun := &optun{done: make(chan struct{})}
 		err := tun.Start(s.virtualIP.String(), &sdwan)
 		if err != nil {
 			gLog.e("open tun fail:%v", err)
@@ -300,8 +307,9 @@ func (s *p2pSDWAN) StartTun() error {
 		}
 		s.tun = tun
 		s.tunErr = ""
-		go s.readTunLoop()
-		go s.readNodeLoop() // multi-thread read will cause packets out of order, resulting in slower speeds
+		tun.loops.Add(2)
+		go s.readTunLoop(tun)
+		go s.readNodeLoop(tun) // multi-thread read will cause packets out of order, resulting in slower speeds
 	}
 	err := setTunAddr(s.tun.tunName, s.virtualIP.String(), sdwan.Gateway, s.tun.dev)
 	if err != nil {
@@ -325,7 +333,6 @@ func handleSDWAN(subType uint16, msg []byte) error {
 		// GNetwork.sdwan.detail = &rsp
 		if gConf.Network.previousIP != gConf.Network.publicIP || previous.CentralNode != rsp.CentralNode || previous.Gateway != rsp.Gateway || previous.Enable != rsp.Enable {
 			GNetwork.sdwan.reset()
-			preAndroidSDWANConfig = "" // let android app reset VpnService
 		}
 		gConf.setSDWAN(rsp)
 		if isAndroid() {

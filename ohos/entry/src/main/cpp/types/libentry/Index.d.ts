@@ -9,6 +9,8 @@ export const isCoreRunning: () => boolean;
 export const getCoreLastError: () => string;
 export const stopCore: () => boolean;
 export const getNodeName: () => string;
+/** JSON health: coreAlive, controlOnline, generation, lastPacketInMs, lastPacketOutMs. */
+export const getCoreHealth: () => string;
 export const getSdwanConfig: () => Promise<string>;
 export const readTun: (buffer: ArrayBuffer) => boolean;
 export const writeTun: (buffer: ArrayBuffer, timeoutMs: number) => number;

@@ -34,11 +34,14 @@ type p2pApp struct {
 	iptree    *IPTree // for whitelist
 
 	hbMtx         sync.Mutex
-	running       bool
+	running       atomic.Bool
 	id            uint64
 	key           uint64 // aes
 	appKeyBytes   []byte // pre-calc
 	wg            sync.WaitGroup
+	workerMtx     sync.Mutex
+	done          chan struct{}
+	stopOnce      sync.Once
 	msgChan       chan appMsgCtx
 	once          sync.Once
 	tunnelNum     int
@@ -76,7 +79,6 @@ type p2pApp struct {
 	preDirectSuccessIP string
 }
 
-
 func (app *p2pApp) Tunnel(idx int) *P2PTunnel {
 	if idx > app.tunnelNum-1 {
 		return nil
@@ -111,6 +113,8 @@ func (app *p2pApp) RetryTime() time.Time {
 }
 
 func (app *p2pApp) Init(tunnelNum int) {
+	app.running.Store(true)
+	app.done = make(chan struct{})
 	app.tunnelNum = tunnelNum
 	app.allTunnels = make([]*P2PTunnel, tunnelNum)
 	app.retryNum = make([]int, tunnelNum)
@@ -150,32 +154,60 @@ func (app *p2pApp) Start(isClient bool) {
 
 	app.PreCalcKeyBytes()
 	if isClient {
-		go app.daemonP2PTunnel()
+		app.goWorker(func() { app.daemonP2PTunnel() })
 	}
 
 }
 
+func (app *p2pApp) goWorker(worker func()) {
+	app.workerMtx.Lock()
+	defer app.workerMtx.Unlock()
+	if !app.running.Load() {
+		return
+	}
+	app.wg.Add(1)
+	go func() {
+		defer app.wg.Done()
+		worker()
+	}()
+}
+
 func (app *p2pApp) daemonP2PTunnel() error {
-	for app.running {
+	for app.running.Load() {
 
 		for i := 0; i < app.relayIdxStart; i++ {
 			app.daemonDirectTunnel(i)
-			time.Sleep(time.Second)
+			if !app.wait(time.Second) {
+				return nil
+			}
 		}
 		for i := app.relayIdxStart; i < app.tunnelNum; i++ {
 			if i > app.relayIdxStart {
 				app.nextRetryTime[i] = time.Now().Add(time.Second * 180) // the second relay tunnel wait 3 mins
 			}
 			app.daemonRelayTunnel(i)
-			time.Sleep(time.Second)
+			if !app.wait(time.Second) {
+				return nil
+			}
 		}
-		time.Sleep(time.Second * 3)
+		if !app.wait(time.Second * 3) {
+			return nil
+		}
 	}
 	return nil
 }
 
+func (app *p2pApp) wait(delay time.Duration) bool {
+	select {
+	case <-app.done:
+		return false
+	case <-time.After(delay):
+		return app.running.Load()
+	}
+}
+
 func (app *p2pApp) daemonDirectTunnel(idx int) error {
-	if !GNetwork.online {
+	if !GNetwork.online.Load() {
 		return nil
 	}
 	if app.config.ForceRelay == 1 && app.config.RelayNode != app.config.PeerNode {
@@ -220,10 +252,11 @@ func (app *p2pApp) daemonDirectTunnel(idx int) error {
 	if app.Tunnel(idx) != nil {
 		app.preDirectSuccessIP = app.config.peerIP
 		app.once.Do(func() {
-			go app.listen()
+			app.goWorker(func() { app.listen() })
 			// memapp also need
 			for i := app.relayIdxStart; i < app.tunnelNum; i++ {
-				go app.relayHeartbeatLoop(i)
+				idx := i
+				app.goWorker(func() { app.relayHeartbeatLoop(idx) })
 			}
 
 		})
@@ -295,7 +328,7 @@ func (app *p2pApp) buildDirectTunnel(idx int) error {
 }
 
 func (app *p2pApp) daemonRelayTunnel(idx int) error {
-	if !GNetwork.online {
+	if !GNetwork.online.Load() {
 		return nil
 	}
 
@@ -340,10 +373,11 @@ func (app *p2pApp) daemonRelayTunnel(idx int) error {
 	app.nextRetryTime[idx] = time.Now().Add(time.Duration(interval) * time.Second)
 	if app.Tunnel(idx) != nil {
 		app.once.Do(func() {
-			go app.listen()
+			app.goWorker(func() { app.listen() })
 			// memapp also need
 			for i := 1; i < app.tunnelNum; i++ {
-				go app.relayHeartbeatLoop(i)
+				idx := i
+				app.goWorker(func() { app.relayHeartbeatLoop(idx) })
 			}
 		})
 	}
@@ -517,10 +551,10 @@ func (app *p2pApp) listenTCP() error {
 		return err
 	}
 	defer app.listener.Close()
-	for app.running {
+	for app.running.Load() {
 		conn, err := app.listener.Accept()
 		if err != nil {
-			if app.running {
+			if app.running.Load() {
 				gLog.e("appid:%d  accept error:%s", app.id, err)
 			}
 			break
@@ -584,7 +618,7 @@ func (app *p2pApp) listenUDP() error {
 	defer app.listenerUDP.Close()
 	buffer := make([]byte, 64*1024+PaddingSize)
 	udpID := make([]byte, 8)
-	for app.running {
+	for app.running.Load() {
 		app.listenerUDP.SetReadDeadline(time.Now().Add(UDPReadTimeout))
 		len, remoteAddr, err := app.listenerUDP.ReadFrom(buffer)
 		if err != nil {
@@ -664,44 +698,49 @@ func (app *p2pApp) listen() error {
 	}
 	gLog.i("appid:%d LISTEN ON PORT %s:%d START", app.id, app.config.Protocol, app.config.SrcPort)
 	defer gLog.i("appid:%d LISTEN ON PORT %s:%d END", app.id, app.config.Protocol, app.config.SrcPort)
-	app.wg.Add(1)
-	defer app.wg.Done()
-	for app.running {
+	for app.running.Load() {
 		if app.config.Protocol == "udp" {
 			app.listenUDP()
 		} else {
 			app.listenTCP()
 		}
-		if !app.running {
+		if !app.running.Load() {
 			break
 		}
-		time.Sleep(time.Second * 10)
+		if !app.wait(time.Second * 10) {
+			break
+		}
 	}
 	return nil
 }
 
 func (app *p2pApp) Close() {
-	app.running = false
-	if app.listener != nil {
-		app.listener.Close()
-	}
-	if app.listenerUDP != nil {
-		app.listenerUDP.Close()
-	}
-	closeOverlayConns(app.id)
+	app.stopOnce.Do(func() {
+		app.workerMtx.Lock()
+		app.running.Store(false)
+		close(app.done)
+		app.workerMtx.Unlock()
+		if app.listener != nil {
+			app.listener.Close()
+		}
+		if app.listenerUDP != nil {
+			app.listenerUDP.Close()
+		}
+		closeOverlayConns(app.id)
+	})
 	app.wg.Wait()
 }
 
 // TODO: many relay app on the same P2PTunnel will send a lot of relay heartbeat
 func (app *p2pApp) relayHeartbeatLoop(idx int) {
-	app.wg.Add(1)
-	defer app.wg.Done()
 	gLog.d("appid:%d %s relayHeartbeat to rtid:%d start", app.id, app.config.LogPeerNode(), app.rtid[idx])
 	defer gLog.d("appid:%d %s relayHeartbeat to rtid%d end", app.id, app.config.LogPeerNode(), app.rtid[idx])
 
-	for app.running {
+	for app.running.Load() {
 		if app.Tunnel(idx) == nil || !app.Tunnel(idx).isRuning() {
-			time.Sleep(TunnelHeartbeatTime)
+			if !app.wait(TunnelHeartbeatTime) {
+				return
+			}
 			continue
 		}
 		req := RelayHeartbeat{From: gConf.Network.Node, RelayTunnelID: app.Tunnel(idx).id, RelayTunnelID2: app.rtid[idx],
@@ -715,7 +754,9 @@ func (app *p2pApp) relayHeartbeatLoop(idx int) {
 		app.whbTime[idx] = time.Now()
 		// TODO: debug relay heartbeat
 		gLog.dev("appid:%d %s rtid:%d write relay tunnel heartbeat ok", app.id, app.config.LogPeerNode(), app.rtid[idx])
-		time.Sleep(TunnelHeartbeatTime)
+		if !app.wait(TunnelHeartbeatTime) {
+			return
+		}
 	}
 }
 
@@ -787,7 +828,7 @@ func (app *p2pApp) WriteNodeDataMP(IPPacket []byte) (err error) {
 }
 
 func (app *p2pApp) handleNodeDataMP(seq uint64, data []byte, t *P2PTunnel) {
-		GNetwork.nodeData <- data
+	GNetwork.nodeData <- data
 
 }
 
@@ -877,4 +918,3 @@ func (app *p2pApp) ReadMessage(mainType uint16, subType uint16, timeout time.Dur
 		}
 	}
 }
-

@@ -1,6 +1,8 @@
 package openp2p
 
 import (
+	"sync"
+
 	"github.com/openp2p-cn/wireguard-go/tun"
 )
 
@@ -12,12 +14,15 @@ var preAndroidSDWANConfig string
 type optun struct {
 	tunName string
 	dev     tun.Device
+	done    chan struct{}
+	stop    sync.Once
+	loops   sync.WaitGroup
+	readCh  chan []byte
+	writeCh chan []byte
 }
 
-func (t *optun) Stop() error {
-	t.dev.Close()
-	return nil
-}
+func (t *optun) stopped() <-chan struct{} { return t.done }
+
 func init() {
 	AndroidSDWANConfig = make(chan []byte, 1)
 }

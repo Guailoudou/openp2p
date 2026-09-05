@@ -193,6 +193,13 @@ func OpenP2PGetNodeName(data *C.char, capacity C.int32_t) C.int32_t {
 	return C.int32_t(len(name))
 }
 
+// OpenP2PGetHealth copies the current core/control/TUN packet health as JSON.
+//
+//export OpenP2PGetHealth
+func OpenP2PGetHealth(data *C.char, capacity C.int32_t) C.int32_t {
+	return copyCString(data, capacity, op2p.GetOhosHealth())
+}
+
 // OpenP2PReadTun injects a packet read from the OHOS VPN fd.
 //
 //export OpenP2PReadTun

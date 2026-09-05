@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -51,7 +52,7 @@ type NodeData struct {
 
 type P2PNetwork struct {
 	conn          *websocket.Conn
-	online        bool
+	online        atomic.Bool
 	running       bool
 	restartCh     chan bool
 	wgReconnect   sync.WaitGroup
@@ -100,7 +101,6 @@ func P2PNetworkInstance() {
 			restartCh:            make(chan bool, 1),
 			tunnelCloseCh:        make(chan *P2PTunnel, 100),
 			nodeData:             make(chan []byte, 10000),
-			online:               false,
 			running:              true,
 			limiter:              newSpeedLimiter(gConf.Network.ShareBandwidth*1024*1024/8, 1),
 			dt:                   0,
@@ -218,7 +218,7 @@ func (pn *P2PNetwork) run() {
 			}
 			gLog.i("got restart channel")
 			// pn.sdwan.reset()
-			pn.online = false
+			pn.online.Store(false)
 			waitDone := make(chan struct{})
 			go func() {
 				defer close(waitDone)
@@ -231,6 +231,12 @@ func (pn *P2PNetwork) run() {
 				gLog.e("pn.wgReconnect.Wait() timeout, mostly websocket hang. restart client")
 				if !isAndroid() {
 					os.Exit(0)
+				}
+				select {
+				case <-pn.shutdownCh:
+					return
+				case pn.restartCh <- isRestartDelay:
+				default:
 				}
 				continue
 			}
@@ -308,7 +314,7 @@ func (pn *P2PNetwork) autorunApp() {
 	gLog.i("autorunApp start")
 	pn.wgReconnect.Add(1)
 	defer pn.wgReconnect.Done()
-	for pn.running && pn.online {
+	for pn.running && pn.online.Load() {
 		time.Sleep(time.Second)
 		pn.runAll()
 	}
@@ -416,7 +422,7 @@ func (pn *P2PNetwork) AddApp(config AppConfig) error {
 	config.peerToken = gConf.Network.Token
 	gLog.i("addApp %s to %s:%s:%d start", config.AppName, config.LogPeerNode(), config.DstHost, config.DstPort)
 	defer gLog.i("addApp %s to %s:%s:%d end", config.AppName, config.LogPeerNode(), config.DstHost, config.DstPort)
-	if !pn.online {
+	if !pn.online.Load() {
 		return errors.New("P2PNetwork offline")
 	}
 	if _, ok := pn.msgMap.Load(NodeNameToID(config.PeerNode)); !ok {
@@ -436,11 +442,10 @@ func (pn *P2PNetwork) AddApp(config AppConfig) error {
 
 	app := p2pApp{
 		// tunnel:    t,
-		id:      rand.Uint64(),
-		key:     rand.Uint64(),
-		config:  config,
-		iptree:  NewIPTree(config.Whitelist),
-		running: true,
+		id:     rand.Uint64(),
+		key:    rand.Uint64(),
+		config: config,
+		iptree: NewIPTree(config.Whitelist),
 		// asyncWriteChan: make(chan []byte, WriteDataChanSize),
 	}
 	if config.SrcPort == 0 {
@@ -810,7 +815,7 @@ func (pn *P2PNetwork) init() error {
 			break
 		}
 		pn.running = true
-		pn.online = true
+		pn.online.Store(true)
 		pn.conn = ws
 		localAddr := strings.Split(ws.LocalAddr().String(), ":")
 		if len(localAddr) == 2 {
@@ -997,7 +1002,7 @@ func (pn *P2PNetwork) readLoop() {
 }
 
 func (pn *P2PNetwork) write(mainType uint16, subType uint16, packet interface{}) error {
-	if !pn.online {
+	if !pn.online.Load() {
 		return errors.New("P2P network offline")
 	}
 	msg, err := newMessage(mainType, subType, packet)
@@ -1032,7 +1037,7 @@ func (pn *P2PNetwork) relay(to uint64, body []byte) error {
 
 func (pn *P2PNetwork) push(to string, subType uint16, packet interface{}) error {
 	// gLog.d("push msgType %d to %s", subType, to)
-	if !pn.online {
+	if !pn.online.Load() {
 		return errors.New("client offline")
 	}
 	pushHead := PushHeader{}
@@ -1085,13 +1090,27 @@ func (pn *P2PNetwork) shutdown() {
 	pn.shutdownOnce.Do(func() {
 		close(pn.shutdownCh)
 		pn.running = false
-		pn.online = false
+		pn.online.Store(false)
 		if pn.conn != nil {
 			pn.conn.Close()
 		}
 		if pn.sdwan != nil && pn.sdwan.tun != nil {
 			pn.sdwan.tun.Stop()
 		}
+		pn.allTunnels.Range(func(id, value interface{}) bool {
+			tunnel := value.(*P2PTunnel)
+			tunnel.setRun(false)
+			if tunnel.conn != nil {
+				tunnel.conn.Close()
+			}
+			pn.allTunnels.Delete(id)
+			return true
+		})
+		pn.apps.Range(func(id, value interface{}) bool {
+			value.(*p2pApp).Close()
+			pn.apps.Delete(id)
+			return true
+		})
 	})
 }
 

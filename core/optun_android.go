@@ -5,6 +5,7 @@
 package openp2p
 
 import (
+	"io"
 	"time"
 )
 
@@ -23,15 +24,30 @@ func (t *optun) Start(localAddr string, detail *SDWANInfo) error {
 	return nil
 }
 
+func (t *optun) Stop() error {
+	t.stop.Do(func() { close(t.done) })
+	t.loops.Wait()
+	return nil
+}
+
 func (t *optun) Read(bufs [][]byte, sizes []int, offset int) (n int, err error) {
-	bufs[0] = <-AndroidReadTun
-	sizes[0] = len(bufs[0])
-	return 1, nil
+	select {
+	case packet := <-AndroidReadTun:
+		bufs[0] = packet
+		sizes[0] = len(packet)
+		return 1, nil
+	case <-t.done:
+		return 0, io.ErrClosedPipe
+	}
 }
 
 func (t *optun) Write(bufs [][]byte, offset int) (int, error) {
-	AndroidWriteTun <- bufs[0]
-	return len(bufs[0]), nil
+	select {
+	case AndroidWriteTun <- bufs[0]:
+		return len(bufs[0]), nil
+	case <-t.done:
+		return 0, io.ErrClosedPipe
+	}
 }
 
 func AndroidRead(data []byte, len int) {

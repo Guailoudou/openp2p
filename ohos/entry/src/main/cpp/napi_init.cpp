@@ -241,6 +241,25 @@ static napi_value GetNodeName(napi_env env, napi_callback_info info) {
     return result;
 }
 
+static napi_value GetCoreHealth(napi_env env, napi_callback_info info) {
+    (void)info;
+    std::vector<char> buffer(2048);
+    auto getHealth = reinterpret_cast<NodeNameFn>(FindCoreSymbol("OpenP2PGetHealth"));
+    if (getHealth == nullptr) {
+        napi_value result;
+        napi_create_string_utf8(env, "{}", 2, &result);
+        return result;
+    }
+    int32_t length = getHealth(buffer.data(), static_cast<int32_t>(buffer.size()));
+    napi_value result;
+    if (length <= 0 || length >= static_cast<int32_t>(buffer.size())) {
+        napi_create_string_utf8(env, "{}", 2, &result);
+        return result;
+    }
+    napi_create_string_utf8(env, buffer.data(), static_cast<size_t>(length), &result);
+    return result;
+}
+
 struct ConfigWork {
     napi_async_work work = nullptr;
     napi_deferred deferred = nullptr;
@@ -351,6 +370,7 @@ static napi_value Init(napi_env env, napi_value exports) {
         {"getCoreLastError", nullptr, GetCoreLastError, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"stopCore", nullptr, StopCore, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"getNodeName", nullptr, GetNodeName, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"getCoreHealth", nullptr, GetCoreHealth, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"getSdwanConfig", nullptr, GetSDWANConfig, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"readTun", nullptr, ReadTun, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"writeTun", nullptr, WriteTun, nullptr, nullptr, nullptr, napi_default, nullptr},

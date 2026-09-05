@@ -818,21 +818,30 @@ func (t *P2PTunnel) writeLoop() {
 		gLog.dev("%d write tunnel heartbeat ok", t.id)
 	}
 	writeHb()
+	write := func(buff []byte) bool {
+		if err := t.conn.WriteBuffer(buff); err != nil {
+			gLog.e("%d write tunnel error %s", t.id, err)
+			t.close()
+			return false
+		}
+		return true
+	}
 	for t.isRuning() {
 		select {
 		case buff := <-t.writeDataSmall:
-			t.conn.WriteBuffer(buff)
+			if !write(buff) {
+				return
+			}
 			// gLog.d("write icmp %d", time.Now().Unix())
 		default:
 			select {
 			case buff := <-t.writeDataSmall:
-				t.conn.WriteBuffer(buff)
+				if !write(buff) {
+					return
+				}
 				// gLog.d("write icmp %d", time.Now().Unix())
 			case buff := <-t.writeData:
-				err := t.conn.WriteBuffer(buff)
-				if err != nil {
-					gLog.e("%d write tunnel error %s", t.id, err)
-					t.close()
+				if !write(buff) {
 					return
 				}
 			case <-tc.C:

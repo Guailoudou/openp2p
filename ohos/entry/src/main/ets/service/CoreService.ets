@@ -24,6 +24,13 @@ export interface CoreStatus {
   message: string;
   timestamp: number;
   requestId: number;
+  coreAlive?: boolean;
+  controlOnline?: boolean;
+  vpnFdReady?: boolean;
+  vpnGeneration?: number;
+  coreTunGeneration?: number;
+  lastPacketInMs?: number;
+  lastPacketOutMs?: number;
 }
 
 interface CoreLaunchState {
@@ -65,7 +72,14 @@ export class CoreService {
         state: value.state ?? 'unknown',
         message: value.message ?? '',
         timestamp: value.timestamp ?? 0,
-        requestId: value.requestId ?? 0
+        requestId: value.requestId ?? 0,
+        coreAlive: value.coreAlive ?? false,
+        controlOnline: value.controlOnline ?? false,
+        vpnFdReady: value.vpnFdReady ?? false,
+        vpnGeneration: value.vpnGeneration ?? 0,
+        coreTunGeneration: value.coreTunGeneration ?? 0,
+        lastPacketInMs: value.lastPacketInMs ?? 0,
+        lastPacketOutMs: value.lastPacketOutMs ?? 0
       };
     } catch (error) {
       return this.emptyStatus('unknown', this.formatError(error));
@@ -410,7 +424,8 @@ export class CoreService {
   private isRunningState(value: string): boolean {
     return value === 'requested' || value === 'starting' || value === 'core_starting' ||
       value === 'core_started' || value === 'core_restarting' || value === 'vpn_requested' ||
-      value === 'vpn_starting' || value === 'vpn_waiting_config' || value === 'vpn_ready';
+      value === 'vpn_starting' || value === 'vpn_waiting_config' || value === 'vpn_recovering' ||
+      value === 'vpn_ready';
   }
 
   private isWatchdogExpectedState(value: string): boolean {

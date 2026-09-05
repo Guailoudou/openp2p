@@ -228,7 +228,8 @@ export class OpenP2PController {
     this.state.coreMessage = status.message;
     this.state.running = this.isRunningState(status.state);
     this.state.connected = status.state === 'core_started' || status.state === 'vpn_requested' ||
-      status.state === 'vpn_starting' || status.state === 'vpn_waiting_config' || status.state === 'vpn_ready';
+      status.state === 'vpn_starting' || status.state === 'vpn_waiting_config' ||
+      status.state === 'vpn_recovering' || status.state === 'vpn_ready';
   }
 
   private applyLogText(text: string): void {

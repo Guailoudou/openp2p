@@ -376,17 +376,20 @@ initial-exec TLS resolves to dynamic definition
 
 ### 8.3 导出符号验收标准
 
-当前 NAPI 桥要求以下 8 个符号全部存在：
+当前 NAPI 桥要求以下 11 个符号全部存在：
 
 ```text
 OpenP2PStart
+OpenP2PStartWithNode
 OpenP2PStop
 OpenP2PGetStatus
 OpenP2PGetLastError
 OpenP2PGetSDWANConfig
 OpenP2PGetNodeName
+OpenP2PGetHealth
 OpenP2PReadTun
 OpenP2PWriteTun
+OpenP2PIsRunning
 ```
 
 任意符号缺失都会造成 `dlsym` 失败。特别是出现以下日志时，应先检查符号表：
@@ -588,8 +591,8 @@ ohos/entry/build/default/outputs/default/entry-default-signed.hap
 
 `.github/workflows/mobile.yml` 会在 `master` 推送、Pull Request 和手动触发时构建 Android 与 HarmonyOS 产物。HarmonyOS job 需要在仓库中配置：
 
-- Secret `DEVECO_COMMAND_LINE_TOOLS_URL`：华为下载中心提供的 Linux x64 Command Line Tools 直接下载地址；
-- Secret `DEVECO_COMMAND_LINE_TOOLS_SHA256`：对应压缩包的 SHA-256。
+- Secret 或 Variable `DEVECO_COMMAND_LINE_TOOLS_URL`：华为下载中心提供的 Linux x64 Command Line Tools 直接下载地址；
+- Secret 或 Variable `DEVECO_COMMAND_LINE_TOOLS_SHA256`：对应压缩包的 SHA-256。
 
 Command Line Tools 必须包含 API 24 或更高版本的 HarmonyOS SDK。流水线不会读取或生成签名材料，只上传未签名 HAP、Go SO/H、`libentry.so`、校验记录及符号信息。
 
@@ -680,7 +683,7 @@ HAP 中有两层 Native 库：
 nm -D --defined-only libopenp2p_ohos.so | grep OpenP2P
 ```
 
-确认 9 个接口均存在（包括 `OpenP2PIsRunning`），并确认 `.so` 与 `.h` 来自同一次构建。
+确认 11 个接口均存在（包括 `OpenP2PIsRunning` 和 `OpenP2PGetHealth`），并确认 `.so` 与 `.h` 来自同一次构建。
 
 ### 16.4 CMake 报 `OpenP2P OHOS library was not found`
 
@@ -753,7 +756,7 @@ OhosSDWANConfig={"Nodes":null}
 - [ ] SO 为 `ELF64`、`AArch64`、`DYN`；
 - [ ] 动态依赖没有 Linux glibc 或开发机私有库；
 - [ ] 没有 initial-exec TLS 加载问题；
-- [ ] 8 个 `OpenP2P*` 导出符号全部存在；
+- [ ] 11 个 `OpenP2P*` 导出符号全部存在；
 - [ ] `.so` 和 `.h` 来自同一次构建；
 - [ ] 两个产物已放入 `ohos/entry/libs/arm64-v8a`；
 - [ ] DevEco compile SDK 不低于 API 24；

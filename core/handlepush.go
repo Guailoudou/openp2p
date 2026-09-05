@@ -118,9 +118,8 @@ func handlePush(subType uint16, msg []byte) error {
 			appConfig.AppName = fmt.Sprintf("%d", peerID)
 			appConfig.PeerNode = req.From
 			app = &p2pApp{
-				id:      req.AppID,
-				config:  appConfig,
-				running: true,
+				id:     req.AppID,
+				config: appConfig,
 				// asyncWriteChan: make(chan []byte, WriteDataChanSize),
 				key: req.AppKey,
 			}
