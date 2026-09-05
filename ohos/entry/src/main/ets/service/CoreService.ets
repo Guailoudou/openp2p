@@ -7,11 +7,12 @@ import { BackgroundLocationService } from './BackgroundLocationService';
 import { PictureInPictureKeepAliveService } from './PictureInPictureKeepAliveService';
 import { RuntimeStateStore } from './RuntimeStateStore';
 import { TokenStore } from './TokenStore';
+import { CoreStatus, CoreStatusStore } from './CoreStatusStore';
+export { CoreStatus } from './CoreStatusStore';
 
 const DOMAIN = 0x0;
 const TAG = 'OpenP2P-Service';
 const VPN_ABILITY = 'OplVpnExtensionAbility';
-const STATUS_FILE = 'opl_core_status.json';
 const LOCK_FILE = 'vpn_ipc.lock';
 const VPN_REQUEST_FILE = 'opl_vpn_request.json';
 const CORE_CHECK_REQUEST_FILE = 'opl_core_check_request';
@@ -19,19 +20,6 @@ const LOG_FILE = 'log/openp2p.log';
 const HEARTBEAT_STALE_MS = 35 * 1000;
 const RECOVERY_COOLDOWN_MS = 10 * 60 * 1000;
 
-export interface CoreStatus {
-  state: string;
-  message: string;
-  timestamp: number;
-  requestId: number;
-  coreAlive?: boolean;
-  controlOnline?: boolean;
-  vpnFdReady?: boolean;
-  vpnGeneration?: number;
-  coreTunGeneration?: number;
-  lastPacketInMs?: number;
-  lastPacketOutMs?: number;
-}
 
 interface CoreLaunchState {
   baseDir: string;
@@ -63,24 +51,7 @@ export class CoreService {
 
   readStatus(): CoreStatus {
     try {
-      const path = `${this.filesDir}/${STATUS_FILE}`;
-      if (!fileIo.accessSync(path)) {
-        return this.emptyStatus('not_started', '核心尚未启动');
-      }
-      const value = JSON.parse(fileIo.readTextSync(path)) as CoreStatus;
-      return {
-        state: value.state ?? 'unknown',
-        message: value.message ?? '',
-        timestamp: value.timestamp ?? 0,
-        requestId: value.requestId ?? 0,
-        coreAlive: value.coreAlive ?? false,
-        controlOnline: value.controlOnline ?? false,
-        vpnFdReady: value.vpnFdReady ?? false,
-        vpnGeneration: value.vpnGeneration ?? 0,
-        coreTunGeneration: value.coreTunGeneration ?? 0,
-        lastPacketInMs: value.lastPacketInMs ?? 0,
-        lastPacketOutMs: value.lastPacketOutMs ?? 0
-      };
+      return CoreStatusStore.read(this.context);
     } catch (error) {
       return this.emptyStatus('unknown', this.formatError(error));
     }
@@ -217,7 +188,6 @@ export class CoreService {
       requestId: this.requestId
     };
 
-    this.removeFile(STATUS_FILE);
     this.removeFile(LOCK_FILE);
     this.removeFile(VPN_REQUEST_FILE);
     this.removeFile(CORE_CHECK_REQUEST_FILE);
@@ -375,7 +345,7 @@ export class CoreService {
       timestamp: Date.now(),
       requestId: this.requestId
     };
-    this.writeText(STATUS_FILE, JSON.stringify(status));
+    CoreStatusStore.write(this.context, status);
   }
 
   private writeText(name: string, value: string): void {

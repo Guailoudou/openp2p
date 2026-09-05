@@ -6,10 +6,10 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import coreNative from 'libentry.so';
 import { RuntimeStateStore } from '../service/RuntimeStateStore';
 import { TokenStore } from '../service/TokenStore';
+import { CoreStatusStore } from '../service/CoreStatusStore';
 
 const DOMAIN = 0x0;
 const TAG = 'OPL-VPN';
-const STATUS_FILE = 'opl_core_status.json';
 const LOCK_FILE = 'vpn_ipc.lock';
 const VPN_REQUEST_FILE = 'opl_vpn_request.json';
 const CORE_CHECK_REQUEST_FILE = 'opl_core_check_request';
@@ -87,6 +87,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
   private lastVpnConfigFingerprint: string = '';
   private controlOfflineSince: number = 0;
   private currentStatusState: string = 'starting';
+  private connectedSince: number = 0;
   private currentStatusMessage: string = 'VPN 扩展已启动';
 
   onCreate(want: Want): void {
@@ -175,16 +176,22 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
   }
 
   private writeStatus(state: string, message: string, requestId: number = this.requestId): void {
+    if (state === 'vpn_ready') {
+      if (this.connectedSince === 0) {
+        this.connectedSince = Date.now();
+      }
+    } else {
+      this.connectedSince = 0;
+    }
     this.currentStatusState = state;
     this.currentStatusMessage = message;
     try {
-      const path = `${this.context.filesDir}/${STATUS_FILE}`;
-      const file = fileIo.openSync(path, fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
       const health = this.readCoreHealth();
-      fileIo.writeSync(file.fd, JSON.stringify({
+      CoreStatusStore.write(this.context, {
         state,
         message,
         timestamp: Date.now(),
+        connectedSince: this.connectedSince,
         requestId,
         coreAlive: health.coreAlive === true,
         controlOnline: health.controlOnline === true,
@@ -193,8 +200,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
         coreTunGeneration: health.generation ?? 0,
         lastPacketInMs: health.lastPacketInMs ?? 0,
         lastPacketOutMs: health.lastPacketOutMs ?? 0
-      }));
-      fileIo.closeSync(file.fd);
+      });
     } catch (error) {
       hilog.warn(DOMAIN, TAG, 'Unable to write core status: %{public}s', JSON.stringify(error));
     }
@@ -254,15 +260,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
 
   private readPendingRequestId(): number {
     try {
-      const path = `${this.context.filesDir}/${STATUS_FILE}`;
-      if (!fileIo.accessSync(path)) {
-        return 0;
-      }
-      const status = JSON.parse(fileIo.readTextSync(path)) as Record<string, Object> | null;
-      if (status === null) {
-        return 0;
-      }
-      const requestId = status['requestId'];
+      const requestId = CoreStatusStore.read(this.context).requestId;
       return typeof requestId === 'number' && requestId > 0 ? requestId : 0;
     } catch (_) {
       return 0;
@@ -460,14 +458,14 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
     const vpnConnection = vpnExtension.createVpnConnection(this.context);
     this.connection = vpnConnection;
     try {
+      await vpnConnection.protectProcessNet();
+      this.vpnFd = await vpnConnection.create(config);
       if (!coreNative.startTunBridge(this.vpnFd)) {
         throw new Error('Unable to start native TUN bridge');
       }
-      await vpnConnection.protectProcessNet();
+    } catch (error) {
       coreNative.stopTunBridge();
       this.vpnFd = -1;
-      this.vpnFd = await vpnConnection.create(config);
-    } catch (error) {
       this.connection = undefined;
       try {
         await vpnConnection.destroy();
@@ -677,12 +675,12 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
 
   private checkCoreLiveness(): void {
     if (this.stopping || this.recoveryInProgress || this.foregroundCheckInProgress) {
+      return;
+    }
     if (this.vpnFd >= 0 && coreNative.getTunBridgeState() !== 1) {
       this.recoverVpn(this.vpnGeneration, 'Native TUN bridge stopped').catch((error: Object) => {
         hilog.error(DOMAIN, TAG, 'Native TUN bridge recovery failed: %{public}s', this.formatError(error));
       });
-      return;
-    }
       return;
     }
     if (this.isNativeCoreRunning()) {
@@ -826,9 +824,9 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
   private async destroyVpn(): Promise<void> {
     if (this.vpnFd < 0 && this.connection === undefined) {
       return;
-    coreNative.stopTunBridge();
     }
     this.vpnGeneration++;
+    coreNative.stopTunBridge();
     if (this.vpnFd >= 0) {
       try {
         fileIo.closeSync(this.vpnFd);
