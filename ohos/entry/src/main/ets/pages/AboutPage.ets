@@ -46,16 +46,16 @@ export struct AboutPage {
   }
 
   @Builder
-  private openSourceRow() {
+  private linkRow(label: string, url: string, value: string) {
     Row({ space: 14 }) {
       SymbolGlyph($r('sys.symbol.link'))
         .fontSize(18)
         .fontColor([this.themeColor])
-      Text('软件开源')
+      Text(label)
         .fontSize(15)
         .fontColor($r('app.color.text_secondary'))
         .layoutWeight(1)
-      Hyperlink('https://github.com/openp2p-cn/openp2p', 'OpenP2P')
+      Hyperlink(url, value)
         .color(this.themeColor)
     }
     .width('100%')
@@ -66,7 +66,7 @@ export struct AboutPage {
     Scroll() {
       Column({ space: 18 }) {
         Column({ space: 12 }) {
-          Image($r('app.media.openp2p1024'))
+          Image($r('app.media.1024'))
             .width(80)
             .height(80)
             .objectFit(ImageFit.Cover)
@@ -89,22 +89,18 @@ export struct AboutPage {
         Column() {
           this.infoRow($r('sys.symbol.info_circle'), '应用版本', this.appVersion)
           Divider().color($r('app.color.divider')).padding({ left: 18, right: 18 })
-          this.infoRow($r('sys.symbol.display'), '运行平台', 'HarmonyOS')
-          Divider().color($r('app.color.divider')).padding({ left: 18, right: 18 })
-          this.infoRow($r('sys.symbol.gearshape_fill'), '核心架构', 'arm64-v8a')
-          Divider().color($r('app.color.divider')).padding({ left: 18, right: 18 })
-          this.infoRow($r('sys.symbol.hammer_fill'), '核心类型', 'OpenP2P Go Native')
-          Divider().color($r('app.color.divider')).padding({ left: 18, right: 18 })
           this.infoRow($r('sys.symbol.display'), '设备显示名称', this.localDeviceDisplayName)
           Divider().color($r('app.color.divider')).padding({ left: 18, right: 18 })
-          this.openSourceRow()
+          this.linkRow('软件开源', 'https://github.com/openp2p-cn/openp2p', 'OpenP2P')
+          Divider().color($r('app.color.divider')).padding({ left: 18, right: 18 })
+          this.linkRow('鸿蒙端作者', 'https://github.com/Guailoudou', 'Guailoudou')
         }
         .width('100%')
         .backgroundColor($r('app.color.card_background'))
         .borderRadius(20)
         .shadow({ radius: 16, color: $r('app.color.card_shadow'), offsetX: 0, offsetY: 6 })
 
-        Text('OpenP2P 提供安全、轻量的点对点网络连接能力。本客户端使用 ArkTS 与 ArkUI 原生组件构建。')
+        Text('OpenP2P是一个开源、免费、轻量级的P2P共享网络。你的设备将组成一个私有P2P网络，里面的设备可以直接访问其它成员，或者通过其它成员转发数据间接访问。 如果私有网络无法完成通信，将会到公有P2P网络寻找共享节点协助通信。 相比BT网络用来共享文件，OpenP2P网络用来共享带宽。')
           .width('100%')
           .fontSize(14)
           .fontColor($r('app.color.text_secondary'))
