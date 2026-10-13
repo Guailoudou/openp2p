@@ -93,7 +93,7 @@ export struct AboutPage {
           Divider().color($r('app.color.divider')).padding({ left: 18, right: 18 })
           this.linkRow('软件开源', 'https://github.com/openp2p-cn/openp2p', 'OpenP2P')
           Divider().color($r('app.color.divider')).padding({ left: 18, right: 18 })
-          this.linkRow('鸿蒙端作者', 'https://github.com/Guailoudou', 'Guailoudou')
+          this.linkRow('鸿蒙端作者', 'https://github.com/Guailoudou', '倪浩东')
         }
         .width('100%')
         .backgroundColor($r('app.color.card_background'))
