@@ -20,7 +20,7 @@ export struct RegistrationForm {
       return;
     }
     if (this.password !== this.passwordConfirmation) {
-      this.message = '两次输入的密码不一致';
+      this.message = '两次输入密码不一致，请重新输入';
       return;
     }
     if (!this.agreed) {

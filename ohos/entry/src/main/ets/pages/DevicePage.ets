@@ -6,6 +6,7 @@ import {
   PortMapping
 } from '../model/ManagementModels';
 import { ManagementSession } from '../service/ManagementSession';
+import { punchPriorityOptionIndex, punchPriorityOptionValue } from '../model/PunchPriority';
 
 @Component
 export struct DevicePage {
@@ -27,7 +28,7 @@ export struct DevicePage {
   @State private editForceIpv6: boolean = false;
   @State private mappingName: string = '';
   @State private mappingProtocol: string = 'tcp';
-  @State private mappingPunchPriority: number = 0;
+  @State private mappingPunchPriority: number = 1;
   @State private mappingSourcePort: string = '222';
   @State private mappingPeerNode: string = '';
   @State private mappingTargetHost: string = 'localhost';
@@ -50,6 +51,13 @@ export struct DevicePage {
     return this.devices.find((item: ManagementDevice): boolean => item.name === this.selectedDeviceName);
   }
 
+  private mappingVersionsDiffer(): boolean {
+    const source = this.selectedDevice();
+    const target = this.devices.find((item: ManagementDevice): boolean => item.name === this.mappingPeerNode);
+    return source !== undefined && target !== undefined && source.version.length > 0 &&
+      target.version.length > 0 && source.version !== target.version;
+  }
+
   private edgeServer(name: string): string {
     const device = this.devices.find((item: ManagementDevice): boolean => item.name === name);
     return device && device.edgeServer ? device.edgeServer : '';
@@ -57,19 +65,19 @@ export struct DevicePage {
 
   private mappingStatus(mapping: PortMapping): string {
     if (mapping.enabled !== 1) {
-      return '已停用';
+      return '未启用';
     }
     if (mapping.isActive !== 1) {
-      return mapping.error && mapping.error.length > 0 ? '连接失败' : '连接中';
+      return mapping.error && mapping.error.length > 0 ? '连接失败' : '正在连接...';
     }
     if (mapping.relayMode === 'public') {
-      return '中继';
+      return '中转';
     }
     if (mapping.relayMode === 'private') {
-      return '中继（私有网络）';
+      return '私有网络';
     }
     if (mapping.linkMode === 'ipv6') {
-      return 'IPv6 直连';
+      return 'IPv6直连';
     }
     if (mapping.linkMode === 'intranet') {
       return '内网直连';
@@ -103,10 +111,10 @@ export struct DevicePage {
       return '编辑设备';
     }
     if (this.sheetMode === 'mappings') {
-      return '端口映射';
+      return '端口转发';
     }
     if (this.sheetMode === 'editMapping') {
-      return this.selectedMappingIndex >= 0 ? '编辑端口映射' : '新增端口映射';
+      return this.selectedMappingIndex >= 0 ? '编辑端口转发' : '新建端口转发';
     }
     if (this.sheetMode === 'deleteDevice') {
       return '删除设备';
@@ -215,7 +223,7 @@ export struct DevicePage {
   private deviceContextMenu(device: ManagementDevice) {
     Menu() {
       if (device.isActive === 1) {
-        MenuItem({ content: '端口映射' })
+        MenuItem({ content: '端口转发' })
           .onClick((): void => { this.handleDeviceMenuAction(device, 'mappings'); })
         MenuItem({ content: '编辑设备' })
           .onClick((): void => { this.handleDeviceMenuAction(device, 'edit'); })
@@ -237,7 +245,7 @@ export struct DevicePage {
   private deviceStartSwipeActions(device: ManagementDevice) {
     Row() {
       if (device.isActive === 1) {
-        Button('映射')
+        Button('转发')
           .width(68).height(124).borderRadius(0)
           .fontColor($r('app.color.button_text')).backgroundColor(this.themeColor)
           .onClick((): void => { this.handleDeviceMenuAction(device, 'mappings'); })
@@ -286,11 +294,11 @@ export struct DevicePage {
   private async saveDevice(): Promise<void> {
     const publicPort = Number(this.editPublicPort);
     if (this.editDeviceName.trim().length < 8) {
-      this.message = '设备名称不能少于 8 个字符';
+      this.message = '设备名字不能少于8个字符';
       return;
     }
     if (publicPort < 0 || publicPort > 65535) {
-      this.message = '公网端口必须在 0-65535 之间';
+      this.message = '端口范围0-65535';
       return;
     }
     const request: DeviceEditRequest = {
@@ -303,7 +311,7 @@ export struct DevicePage {
     try {
       await this.session.api.editDevice(this.selectedDeviceName, request);
       this.selectedDeviceName = request.newName;
-      this.message = '设备信息已保存';
+      this.message = '保存成功';
       this.showSheet = false;
       await this.loadDevices();
     } catch (error) {
@@ -415,7 +423,7 @@ export struct DevicePage {
     const device = this.selectedDevice();
     if (!device || device.isActive !== 1) {
       this.mappings = [];
-      this.message = '设备离线，无法读取端口映射';
+      this.message = '设备离线，无法读取端口转发';
       return;
     }
     this.sheetMode = 'mappings';
@@ -424,7 +432,7 @@ export struct DevicePage {
       this.mappings = await this.session.api.getMappings(device.name, this.edgeServer(device.name));
     } catch (error) {
       this.mappings = [];
-      this.message = `读取端口映射失败：${String(error)}`;
+      this.message = `读取端口转发失败：${String(error)}`;
     } finally {
       this.loading = false;
     }
@@ -453,9 +461,9 @@ export struct DevicePage {
       this.originalProtocol = mapping.protocol;
       this.originalSourcePort = mapping.srcPort;
     } else {
-      this.mappingName = '新建映射';
+      this.mappingName = '新建端口转发';
       this.mappingProtocol = 'tcp';
-      this.mappingPunchPriority = 0;
+      this.mappingPunchPriority = 1;
       this.mappingSourcePort = '222';
       const peer = this.devices.find((item: ManagementDevice): boolean => item.name !== this.selectedDeviceName);
       this.mappingPeerNode = peer ? peer.name : '';
@@ -476,7 +484,7 @@ export struct DevicePage {
   private showPeerDevicePicker(): void {
     const peers = this.peerDevices();
     if (peers.length === 0) {
-      this.message = '没有可选的远端设备';
+      this.message = '没有可选的目标设备';
       return;
     }
     const names = peers.map((device: ManagementDevice): string => device.name);
@@ -503,18 +511,18 @@ export struct DevicePage {
   }
 
   private punchPriorityLabel(value: number): string {
-    const labels: string[] = ['默认', 'TCP 优先', '仅 TCP', '仅 UDP'];
-    return labels[value] ? labels[value] : labels[0];
+    const labels: string[] = ['TCP优先 (默认)', 'UDP优先', '仅TCP', '仅UDP'];
+    return labels[punchPriorityOptionIndex(value)];
   }
 
   private validateMapping(): string {
     const sourcePort = Number(this.mappingSourcePort);
     const targetPort = Number(this.mappingTargetPort);
     if (this.mappingName.length === 0 || this.mappingName.length > 32) {
-      return '映射名称必须为 1-32 个字符';
+      return '端口转发名字必须为 1-32 个字符';
     }
     if (this.mappingPeerNode.length === 0) {
-      return '请选择远端设备';
+      return '请选择目标设备';
     }
     if (sourcePort < 0 || sourcePort > 65535 || targetPort < 0 || targetPort > 65535) {
       return '端口必须在 0-65535 之间';
@@ -522,7 +530,7 @@ export struct DevicePage {
     const occupied = this.mappings.some((item: PortMapping): boolean =>
       item.srcPort === sourcePort && item.protocol === this.mappingProtocol &&
       !(item.srcPort === this.originalSourcePort && item.protocol === this.originalProtocol));
-    return occupied ? '该本地端口已被其他映射占用' : '';
+    return occupied ? '该本地端口已被其他端口转发占用' : '';
   }
 
   private async saveMapping(): Promise<void> {
@@ -547,7 +555,7 @@ export struct DevicePage {
     this.loading = true;
     try {
       await this.session.api.saveMapping(this.selectedDeviceName, this.edgeServer(this.mappingPeerNode), request);
-      this.message = '端口映射已保存';
+      this.message = '保存成功';
       await this.openMappings();
     } catch (error) {
       this.message = `保存失败：${String(error)}`;
@@ -558,13 +566,13 @@ export struct DevicePage {
 
   private async checkRemote(): Promise<void> {
     if (this.mappingProtocol !== 'tcp') {
-      this.showToast('远端服务检测仅支持 TCP');
+      this.showToast('仅支持TCP协议的服务检测');
       return;
     }
     try {
       const response = await this.session.api.checkRemote(this.mappingPeerNode,
         this.edgeServer(this.mappingPeerNode), this.mappingTargetHost, Number(this.mappingTargetPort));
-      this.showToast(response.error ? '目标连接失败，请检测地址和端口是否正确' : '远端服务可达');
+      this.showToast(response.error ? '目标连接失败，请检测地址和端口是否正确' : '目标连接成功');
     } catch (error) {
       this.showToast(`检测失败：${String(error)}`);
     }
@@ -589,7 +597,7 @@ export struct DevicePage {
         this.edgeServer(this.selectedDeviceName), mapping);
       this.mappings.splice(index, 1);
       this.mappings = [...this.mappings];
-      this.message = '端口映射已删除';
+      this.message = '删除成功';
     } catch (error) {
       this.message = `删除失败：${String(error)}`;
     }
@@ -609,17 +617,17 @@ export struct DevicePage {
   @Builder
   private deviceEditor() {
     Column({ space: 14 }) {
-      this.fieldLabel('设备名称', '至少 8 个字符，用于管理中心识别设备')
-      TextInput({ text: this.editDeviceName, placeholder: '设备名称' })
+      this.fieldLabel('设备名字', '至少 8 个字符，用于管理中心识别设备')
+      TextInput({ text: this.editDeviceName, placeholder: '设备名字' })
         .onChange((value: string): void => { this.editDeviceName = value; })
-      this.fieldLabel('共享带宽', '允许设备用于中继的最大带宽，单位 Mbps')
+      this.fieldLabel('共享带宽', '允许设备用于中转的最大带宽，单位 Mbps')
       TextInput({ text: this.editBandwidth, placeholder: '共享带宽 Mbps' })
         .type(InputType.Number).onChange((value: string): void => { this.editBandwidth = value; })
       this.fieldLabel('公网监听端口', '0 表示自动选择；手动设置范围为 1-65535')
       TextInput({ text: this.editPublicPort, placeholder: '公网端口' })
         .type(InputType.Number).onChange((value: string): void => { this.editPublicPort = value; })
       Row() {
-        Text('强制使用 IPv6').layoutWeight(1).fontColor($r('app.color.text_primary'))
+        Text('强制使用 IPv6 连接').layoutWeight(1).fontColor($r('app.color.text_primary'))
         Toggle({ type: ToggleType.Switch, isOn: this.editForceIpv6 })
           .selectedColor(this.themeColor)
           .onChange((value: boolean): void => { this.editForceIpv6 = value; })
@@ -631,12 +639,12 @@ export struct DevicePage {
   @Builder
   private mappingList() {
     Column({ space: 12 }) {
-      Button('新增端口映射')
+      Button('新建端口转发')
         .width('100%').height(46).onClick((): void => { this.openMappingEditor(-1); })
       if (this.loading) {
         LoadingProgress().width(36).height(36)
       } else if (this.mappings.length === 0) {
-        Text('暂无端口映射').fontColor($r('app.color.text_secondary')).padding(24)
+        Text('该设备没有创建端口转发').fontColor($r('app.color.text_secondary')).padding(24)
       } else {
         List({ space: 10 }) {
           ForEach(this.mappings, (mapping: PortMapping, index: number) => {
@@ -687,8 +695,8 @@ export struct DevicePage {
   private mappingEditor() {
     Scroll() {
       Column({ space: 12 }) {
-        this.fieldLabel('映射名称')
-        TextInput({ text: this.mappingName, placeholder: '映射名称' })
+        this.fieldLabel('端口转发名字')
+        TextInput({ text: this.mappingName, placeholder: '端口转发名字' })
           .width('100%').height(48)
           .onChange((value: string): void => { this.mappingName = value; })
         Row({ space: 10 }) {
@@ -709,10 +717,14 @@ export struct DevicePage {
               .onChange((value: string): void => { this.mappingSourcePort = value; })
           }.layoutWeight(1).alignItems(HorizontalAlign.Start)
         }.width('100%')
-        this.fieldLabel('远端设备')
+        if (this.selectedDevice()?.os.toLowerCase().includes('android') === true) {
+          Text('Android 设备监听端口小于 10000 有可能失败。')
+            .width('100%').fontSize(12).fontColor($r('app.color.text_secondary'))
+        }
+        this.fieldLabel('目标设备')
         Button() {
           Row() {
-            Text(this.mappingPeerNode.length > 0 ? this.mappingPeerNode : '请选择远端设备')
+            Text(this.mappingPeerNode.length > 0 ? this.mappingPeerNode : '请选择目标设备')
               .layoutWeight(1).textAlign(TextAlign.Start).fontColor($r('app.color.text_primary'))
             SymbolGlyph($r('sys.symbol.chevron_right'))
               .fontSize(18).fontColor([$r('app.color.text_secondary')])
@@ -721,38 +733,42 @@ export struct DevicePage {
         .width('100%').height(48).padding({ left: 20, right: 16 })
         .backgroundColor($r('app.color.page_background'))
         .onClick((): void => { this.showPeerDevicePicker(); })
+        if (this.mappingVersionsDiffer()) {
+          Text('版本不一致，可能无法建立端口转发，建议都升级到最新版本')
+            .width('100%').fontSize(12).fontColor($r('app.color.text_secondary'))
+        }
         Row({ space: 10 }) {
           Column({ space: 6 }) {
-            this.fieldLabel('远端主机')
-            TextInput({ text: this.mappingTargetHost, placeholder: '远端主机' })
+            this.fieldLabel('目标地址')
+            TextInput({ text: this.mappingTargetHost, placeholder: '目标地址' })
               .width('100%').height(48)
               .onChange((value: string): void => { this.mappingTargetHost = value; })
           }.layoutWeight(2).alignItems(HorizontalAlign.Start)
           Column({ space: 6 }) {
-            this.fieldLabel('远端端口')
-            TextInput({ text: this.mappingTargetPort, placeholder: '远端端口' })
+            this.fieldLabel('目标端口')
+            TextInput({ text: this.mappingTargetPort, placeholder: '目标端口' })
               .width('100%').height(48).type(InputType.Number)
               .onChange((value: string): void => { this.mappingTargetPort = value; })
           }.layoutWeight(1).alignItems(HorizontalAlign.Start)
         }.width('100%')
-        this.fieldLabel('访问白名单')
+        this.fieldLabel('访问白名单', '支持单个 IP、IP 段或范围，例如 127.0.0.1,192.168.1.0/24,10.1.1.30-10.1.1.50')
         TextInput({ text: this.mappingWhitelist, placeholder: '访问白名单（可选）' })
           .width('100%').height(48)
           .onChange((value: string): void => { this.mappingWhitelist = value; })
-        this.fieldLabel('指定中继节点')
-        TextInput({ text: this.mappingRelayNode, placeholder: '指定中继节点（可选）' })
+        this.fieldLabel('指定中转节点')
+        TextInput({ text: this.mappingRelayNode, placeholder: '指定中转节点（可选）' })
           .width('100%').height(48)
           .onChange((value: string): void => { this.mappingRelayNode = value; })
         Row({ space: 10 }) {
           Column({ space: 6 }) {
-            this.fieldLabel('打洞优先级')
-            Select([{ value: '默认' }, { value: 'TCP 优先' }, { value: '仅 TCP' }, { value: '仅 UDP' }])
+            this.fieldLabel('打洞协议优先级')
+            Select([{ value: 'TCP优先 (默认)' }, { value: 'UDP优先' }, { value: '仅TCP' }, { value: '仅UDP' }])
               .width('100%').height(48)
-              .selected(this.mappingPunchPriority)
+              .selected(punchPriorityOptionIndex(this.mappingPunchPriority))
               .value(this.punchPriorityLabel(this.mappingPunchPriority))
               .selectedOptionBgColor(this.themeSoftColor)
               .selectedOptionFontColor(this.themeColor)
-              .onSelect((index: number): void => { this.mappingPunchPriority = index; })
+              .onSelect((index: number): void => { this.mappingPunchPriority = punchPriorityOptionValue(index); })
           }.layoutWeight(1).alignItems(HorizontalAlign.Start)
           Button('检测远端服务').layoutWeight(1).height(48).onClick((): void => { this.checkRemote(); })
         }.width('100%').alignItems(VerticalAlign.Bottom)
@@ -821,7 +837,7 @@ export struct DevicePage {
             offset: { xs: 0, sm: 0, md: 1, lg: 1, xl: 2 }
           }) {
             Column({ space: 16 }) {
-          PageHeader({ title: '设备', subtitle: '管理 OpenP2P 设备与端口映射' })
+          PageHeader({ title: '设备', subtitle: '管理 OpenP2P 设备与端口转发' })
           if (this.message.length > 0) {
             Text(this.message)
               .width('100%').padding(14).fontSize(14).fontColor($r('app.color.text_secondary'))
@@ -830,7 +846,7 @@ export struct DevicePage {
           if (this.loading && this.devices.length === 0) {
             LoadingProgress().width(42).height(42).margin({ top: 48 })
           } else if (this.devices.length === 0) {
-            Text('暂无设备').fontSize(16).fontColor($r('app.color.text_secondary')).padding(48)
+            Text('没有安装客户端').fontSize(16).fontColor($r('app.color.text_secondary')).padding(48)
           } else {
             GridRow({
               columns: { xs: 1, sm: 1, md: 2, lg: 2, xl: 2 },
@@ -862,7 +878,7 @@ export struct DevicePage {
                        Text(device.lanip).fontSize(13).fontColor($r('app.color.text_secondary'))
                      }.width('100%')
                      Row() {
-                       Text('公网 IP').fontSize(13).fontColor($r('app.color.text_tertiary'))
+                       Text('公网IPv4').fontSize(13).fontColor($r('app.color.text_tertiary'))
                        Blank()
                        Text(device.ip).fontSize(13).fontColor($r('app.color.text_secondary'))
                      }.width('100%')

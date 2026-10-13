@@ -147,7 +147,7 @@ struct Index {
       SymbolGlyph($r('sys.symbol.hotspot'))
         .fontSize(24)
         .fontColor([this.selectedTab === 2 ? this.themeColor : $r('app.color.text_secondary')])
-      Text('网络')
+      Text('虚拟网络')
         .fontSize(12)
         .fontColor(this.selectedTab === 2 ? this.themeColor : $r('app.color.text_secondary'))
     }

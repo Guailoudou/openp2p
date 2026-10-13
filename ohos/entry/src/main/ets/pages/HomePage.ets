@@ -52,7 +52,7 @@ export struct HomePage {
         Button(this.savingAccount ? '正在登录…' : '保存并登录')
           .width('100%').height(48).enabled(!this.savingAccount)
           .onClick((): void => { this.saveManagementAccount(); })
-        Button('注册账号')
+        Button('注册新用户')
           .width('100%').height(48).fontColor(this.themeColor)
           .backgroundColor(Color.Transparent).enabled(!this.savingAccount)
           .onClick((): void => { this.registrationMode = true; })
@@ -177,7 +177,7 @@ export struct HomePage {
       height: this.registrationMode ? SheetSize.LARGE : SheetSize.MEDIUM,
       dragBar: true,
       preferType: SheetType.BOTTOM,
-      title: { title: this.registrationMode ? '注册账号' : '管理账号' }
+      title: { title: this.registrationMode ? '新用户注册' : '管理账号' }
     })
   }
 }

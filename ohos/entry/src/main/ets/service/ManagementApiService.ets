@@ -199,6 +199,9 @@ export class ManagementApiService {
         throw new Error(`管理服务请求失败：${String(error)}`);
       }
       if (response.responseCode < 200 || response.responseCode >= 300) {
+        if (authenticated && response.responseCode === 401) {
+          throw new Error('登录凭证无效，请重新登录');
+        }
         throw new Error(`管理服务请求失败 (${response.responseCode})`);
       }
       const text = response.result as string;

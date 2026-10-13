@@ -1,4 +1,5 @@
 import { describe, beforeAll, beforeEach, afterEach, afterAll, it, expect } from '@ohos/hypium';
+import { punchPriorityOptionIndex, punchPriorityOptionValue } from '../main/ets/model/PunchPriority';
 
 export default function localUnitTest() {
   describe('localUnitTest', () => {
@@ -28,6 +29,17 @@ export default function localUnitTest() {
       // Defines a variety of assertion methods, which are used to declare expected boolean conditions.
       expect(a).assertContain(b);
       expect(a).assertEqual(a);
+    });
+    it('punchPriorityUsesProtocolValues', 0, () => {
+      expect(punchPriorityOptionValue(0)).assertEqual(1);
+      expect(punchPriorityOptionValue(1)).assertEqual(0);
+      expect(punchPriorityOptionValue(2)).assertEqual(2);
+      expect(punchPriorityOptionValue(3)).assertEqual(4);
+      expect(punchPriorityOptionIndex(0)).assertEqual(1);
+      expect(punchPriorityOptionIndex(1)).assertEqual(0);
+      expect(punchPriorityOptionIndex(2)).assertEqual(2);
+      expect(punchPriorityOptionIndex(4)).assertEqual(3);
+      expect(punchPriorityOptionIndex(3)).assertEqual(2);
     });
   });
 }

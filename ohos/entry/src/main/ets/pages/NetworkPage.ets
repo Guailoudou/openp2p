@@ -7,6 +7,7 @@ import {
   SdwanMember
 } from '../model/ManagementModels';
 import { ManagementSession } from '../service/ManagementSession';
+import { punchPriorityOptionIndex, punchPriorityOptionValue } from '../model/PunchPriority';
 
 @Component
 export struct NetworkPage {
@@ -18,7 +19,7 @@ export struct NetworkPage {
     mode: 'fullmesh',
     centralNode: '',
     forceRelay: 0,
-    punchPriority: 0,
+    punchPriority: 1,
     Nodes: []
   };
   @State private loading: boolean = false;
@@ -41,19 +42,19 @@ export struct NetworkPage {
       return '离线';
     }
     if (mapping.enabled !== undefined && mapping.enabled !== 1) {
-      return '已停用';
+      return '未启用';
     }
     if (mapping.isActive !== 1) {
-      return mapping.error && mapping.error.length > 0 ? '连接失败' : '连接中';
+      return mapping.error && mapping.error.length > 0 ? '连接失败' : '正在连接...';
     }
     if (mapping.relayMode === 'public') {
-      return '中继';
+      return '中转';
     }
     if (mapping.relayMode === 'private') {
-      return '中继（私有网络）';
+      return '私有网络';
     }
     if (mapping.linkMode === 'ipv6') {
-      return 'IPv6 直连';
+      return 'IPv6直连';
     }
     if (mapping.linkMode === 'intranet') {
       return '内网直连';
@@ -170,6 +171,21 @@ export struct NetworkPage {
     this.config = updated;
   }
 
+  private memberVersionsDiffer(): boolean {
+    let firstVersion = '';
+    for (const member of this.config.Nodes) {
+      const device = this.devices.find((item: ManagementDevice): boolean => item.name === member.name);
+      if (!device || device.version.length === 0) {
+        continue;
+      }
+      if (firstVersion.length > 0 && device.version !== firstVersion) {
+        return true;
+      }
+      firstVersion = device.version;
+    }
+    return false;
+  }
+
   private generateUniqueIp(): string {
     const gatewayParts = this.config.gateway.split('/')[0].split('.');
     if (gatewayParts.length !== 4) {
@@ -186,13 +202,17 @@ export struct NetworkPage {
   }
 
   private addMember(device: ManagementDevice): void {
+    if (this.config.Nodes.length >= 10) {
+      this.message = '成员数不能超过10个';
+      return;
+    }
     if (this.compareVersion(device.version, '3.13.0') < 0) {
-      this.message = `设备 ${device.name} 版本过低，无法加入 SD-WAN`;
+      this.message = `设备 ${device.name} 版本太低，请升级至最新版本`;
       return;
     }
     const ip = this.generateUniqueIp();
     if (ip.length === 0) {
-      this.message = '当前网段没有可用虚拟 IP';
+      this.message = '当前网段没有可用虚拟IP';
       return;
     }
     const member: SdwanMember = { name: device.name, ip: ip, resource: '', isActive: device.isActive };
@@ -295,7 +315,7 @@ export struct NetworkPage {
   @Builder
   private memberContextMenu(member: SdwanMember, index: number) {
     Menu() {
-      MenuItem({ content: '复制虚拟 IP' })
+      MenuItem({ content: '复制虚拟IP' })
         .onClick((): void => { this.copyMemberIp(member.ip); })
       MenuItem({ content: '编辑成员' })
         .onClick((): void => { this.openMember(member); })
@@ -308,7 +328,7 @@ export struct NetworkPage {
     try {
       const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, ip);
       await pasteboard.getSystemPasteboard().setData(data);
-      this.showToast('虚拟 IP 已复制');
+      this.showToast('虚拟IP已复制');
     } catch (error) {
       this.showToast(`复制失败：${String(error)}`);
     }
@@ -347,12 +367,12 @@ export struct NetworkPage {
 
   private async saveMember(): Promise<void> {
     if (!this.isValidIpv4(this.memberIp) || !this.isIpInGateway(this.memberIp, this.config.gateway)) {
-      this.message = '虚拟 IP 无效或不在当前网段中';
+      this.message = '虚拟IP无效或不在当前网段中';
       return;
     }
     if (this.config.Nodes.some((item: SdwanMember): boolean =>
       item.name !== this.memberName && item.ip === this.memberIp)) {
-      this.message = '该虚拟 IP 已被其他网络成员使用';
+      this.message = '该虚拟IP已被其他网络成员使用';
       return;
     }
     const member = this.config.Nodes.find((item: SdwanMember): boolean => item.name === this.memberName);
@@ -373,12 +393,16 @@ export struct NetworkPage {
   }
 
   private async saveNetwork(): Promise<boolean> {
+    if (this.config.Nodes.length > 10) {
+      this.showToast('成员数不能超过10个');
+      return false;
+    }
     if (!this.isValidCidr(this.config.gateway)) {
-      this.showToast('网关必须使用正确的 IPv4/CIDR 格式');
+      this.showToast('网关格式错误，正确格式例如：10.2.3.254/24');
       return false;
     }
     if (this.config.mode === 'central' && this.config.centralNode.length === 0) {
-      this.showToast('中心模式必须选择中心节点');
+      this.showToast('中心模式必须指定一个中心节点');
       return false;
     }
     this.loading = true;
@@ -391,7 +415,7 @@ export struct NetworkPage {
           await this.session.api.refreshSdwanNode(member.name, edge);
         }
       }
-      this.showToast('网络配置已保存并下发');
+      this.showToast('保存成功');
       return true;
     } catch (error) {
       this.showToast(`保存网络失败：${String(error)}`);
@@ -416,8 +440,8 @@ export struct NetworkPage {
   }
 
   private punchPriorityLabel(value: number): string {
-    const labels: string[] = ['默认', 'TCP 优先', '仅 TCP', '仅 UDP'];
-    return labels[value] ? labels[value] : labels[0];
+    const labels: string[] = ['TCP优先 (默认)', 'UDP优先', '仅TCP', '仅UDP'];
+    return labels[punchPriorityOptionIndex(value)];
   }
 
   private isValidIpv4(value: string): boolean {
@@ -462,7 +486,7 @@ export struct NetworkPage {
   @Builder
   private segmentedMode() {
     Row({ space: 8 }) {
-      Button('P2P 模式')
+      Button('P2P模式')
         .layoutWeight(1)
         .fontColor(this.config.mode === 'fullmesh' ? $r('app.color.button_text') : $r('app.color.text_primary'))
         .backgroundColor(this.config.mode === 'fullmesh' ? this.themeColor : $r('app.color.page_background'))
@@ -478,7 +502,7 @@ export struct NetworkPage {
   @Builder
   private nodeSelector() {
     Row({ space: 12 }) {
-      Text(this.config.mode === 'central' ? '中心节点' : '指定中继节点')
+      Text(this.config.mode === 'central' ? '中心节点' : '指定中转节点')
         .layoutWeight(1).fontColor($r('app.color.text_primary'))
       Button() {
         Row() {
@@ -500,10 +524,12 @@ export struct NetworkPage {
   private memberSheet() {
     Scroll() {
       Column({ space: 16 }) {
-        TextInput({ text: this.memberIp, placeholder: '虚拟 IP' })
+        TextInput({ text: this.memberIp, placeholder: '虚拟IP' })
           .onChange((value: string): void => { this.memberIp = value; })
-        TextInput({ text: this.memberResource, placeholder: '可访问资源（可选）' })
+        TextInput({ text: this.memberResource, placeholder: '网络资源（可选）' })
           .onChange((value: string): void => { this.memberResource = value; })
+        Text('留空表示不共享资源。用英文逗号分隔 IP 段或单个 IP，例如 192.168.3.0/24,192.168.1.8/32；目前仅支持 Linux。')
+          .width('100%').fontSize(12).fontColor($r('app.color.text_secondary'))
         if (this.memberTunError.length > 0) {
           Text(`TUN 异常：${this.memberTunError}`).width('100%').fontSize(14).fontColor(Color.Red)
         }
@@ -558,7 +584,7 @@ export struct NetworkPage {
             offset: { xs: 0, sm: 0, md: 1, lg: 1, xl: 2 }
           }) {
             Column({ space: 16 }) {
-          PageHeader({ title: '网络', subtitle: '管理 SD-WAN 网关、模式与成员' })
+          PageHeader({ title: '虚拟网络', subtitle: '管理 SD-WAN 网关、模式与成员' })
         if (this.message.length > 0) {
           Text(this.message)
             .width('100%').padding(14).fontSize(14).fontColor($r('app.color.text_secondary'))
@@ -574,14 +600,20 @@ export struct NetworkPage {
         }) {
           GridCol({ span: 1 }) {
             Column({ space: 14 }) {
-          Text('组网设置').width('100%').fontSize(18).fontWeight(FontWeight.Medium)
-          TextInput({ text: this.config.gateway, placeholder: '网关，例如 10.0.0.0/24' })
+          Text('我的网络').width('100%').fontSize(18).fontWeight(FontWeight.Medium)
+          TextInput({ text: this.config.gateway, placeholder: '网关，例如 10.2.3.254/24' })
             .onChange((value: string): void => { this.updateGateway(value); })
           this.segmentedMode()
+          Text('P2P 模式适合成员较少的网络；中心模式适合成员较多且有稳定在线中心节点的网络。')
+            .width('100%').fontSize(12).fontColor($r('app.color.text_secondary'))
           this.nodeSelector()
+          if (this.config.mode === 'central') {
+            Text('中心节点应稳定在线且容易建立 P2P 连接；有公网 IP 时需放行监听端口的 TCP/UDP，NAT4 设备不能作为中心节点。')
+              .width('100%').fontSize(12).fontColor($r('app.color.text_secondary'))
+          }
           if (this.config.mode !== 'central') {
             Row() {
-              Text('强制中继').layoutWeight(1).fontColor($r('app.color.text_primary'))
+              Text('强制中转').layoutWeight(1).fontColor($r('app.color.text_primary'))
               Toggle({ type: ToggleType.Switch, isOn: this.config.forceRelay === 1 })
                 .selectedColor(this.themeColor)
                 .onChange((value: boolean): void => {
@@ -591,14 +623,17 @@ export struct NetworkPage {
             }.width('100%')
           }
           Row({ space: 12 }) {
-            Text('打洞优先级').layoutWeight(1).fontColor($r('app.color.text_primary'))
-            Select([{ value: '默认' }, { value: 'TCP 优先' }, { value: '仅 TCP' }, { value: '仅 UDP' }])
+            Text('打洞协议优先级').layoutWeight(1).fontColor($r('app.color.text_primary'))
+            Select([{ value: 'TCP优先 (默认)' }, { value: 'UDP优先' }, { value: '仅TCP' }, { value: '仅UDP' }])
               .width(180)
-              .selected(this.config.punchPriority)
+              .selected(punchPriorityOptionIndex(this.config.punchPriority))
               .value(this.punchPriorityLabel(this.config.punchPriority))
               .selectedOptionBgColor(this.themeSoftColor)
               .selectedOptionFontColor(this.themeColor)
-              .onSelect((index: number): void => { this.config.punchPriority = index; this.refreshConfig(); })
+              .onSelect((index: number): void => {
+                this.config.punchPriority = punchPriorityOptionValue(index);
+                this.refreshConfig();
+              })
           }.width('100%').alignItems(VerticalAlign.Center)
             }
             .width('100%').padding(18).backgroundColor($r('app.color.card_background')).borderRadius(18)
@@ -607,6 +642,10 @@ export struct NetworkPage {
           GridCol({ span: 1 }) {
             Column({ space: 12 }) {
           Text('网络成员').width('100%').fontSize(18).fontWeight(FontWeight.Medium)
+          if (this.memberVersionsDiffer()) {
+            Text('各成员版本不一致，可能无法通信，建议都升级到最新版本')
+              .width('100%').fontSize(12).fontColor($r('app.color.text_secondary'))
+          }
           if (this.config.Nodes.length === 0) {
             Text('暂无成员').fontSize(14).fontColor($r('app.color.text_secondary')).padding(18)
           }
