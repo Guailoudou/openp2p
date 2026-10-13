@@ -30,7 +30,6 @@ interface CoreLaunchState {
 }
 
 export class CoreService {
-  private static appInBackground: boolean = false;
   private context: common.UIAbilityContext;
   private requestId: number = 0;
   private tokenStore: TokenStore = new TokenStore();
@@ -94,7 +93,7 @@ export class CoreService {
   async setBackgroundKeepAliveEnabled(enabled: boolean): Promise<boolean> {
     this.runtimeStateStore.setBackgroundKeepAliveEnabled(enabled);
     const available = !enabled || await this.backgroundKeepAlive.requestNotificationPermission();
-    if (!CoreService.appInBackground || !this.isCoreActive()) {
+    if (!this.isCoreActive()) {
       return available;
     }
     return available && await this.applyBackgroundStrategies();
@@ -106,7 +105,7 @@ export class CoreService {
     if (!enabled) {
       this.backgroundLocation.stop();
     }
-    if (CoreService.appInBackground && this.isCoreActive()) {
+    if (this.isCoreActive()) {
       await this.applyBackgroundStrategies();
     }
     return available;
@@ -127,11 +126,10 @@ export class CoreService {
   }
 
   async onAppForeground(): Promise<void> {
-    CoreService.appInBackground = false;
-    this.backgroundLocation.stop();
-    await this.backgroundKeepAlive.stop();
     await this.pictureInPicture.stopForForeground();
     if (!this.runtimeStateStore.isDesiredRunning()) {
+      this.backgroundLocation.stop();
+      await this.backgroundKeepAlive.stop();
       this.removeFile(CORE_CHECK_REQUEST_FILE);
       const inactiveStatus = this.readStatus();
       if (inactiveStatus.state === 'failed' || inactiveStatus.state === 'recovery_exhausted') {
@@ -155,7 +153,6 @@ export class CoreService {
   }
 
   async onAppBackground(): Promise<void> {
-    CoreService.appInBackground = true;
     if (this.isCoreActive()) {
       await this.applyBackgroundStrategies();
     }
@@ -211,16 +208,12 @@ export class CoreService {
     const status = this.readStatus();
     if (status.state === 'vpn_ready' || status.state === 'vpn_waiting_config' ||
       status.state === 'vpn_requested' || status.state === 'vpn_starting') {
-      if (CoreService.appInBackground) {
-        await this.applyBackgroundStrategies();
-      }
+      await this.applyBackgroundStrategies();
       return;
     }
     this.writeText(VPN_REQUEST_FILE, JSON.stringify({ action: 'start', requestId: this.requestId }));
     this.writeStatus('vpn_requested', '正在请求创建 VPN 网络接口');
-    if (CoreService.appInBackground) {
-      await this.applyBackgroundStrategies();
-    }
+    await this.applyBackgroundStrategies();
   }
 
   async stop(): Promise<void> {
@@ -250,9 +243,7 @@ export class CoreService {
     const status = this.readStatus();
     const age = status.timestamp > 0 ? Date.now() - status.timestamp : Number.MAX_SAFE_INTEGER;
     if (!force && this.isRunningState(status.state) && age <= HEARTBEAT_STALE_MS) {
-      if (CoreService.appInBackground) {
-        await this.applyBackgroundStrategies();
-      }
+      await this.applyBackgroundStrategies();
       return false;
     }
     if (status.state === 'recovery_exhausted' && age < RECOVERY_COOLDOWN_MS) {
@@ -290,7 +281,7 @@ export class CoreService {
   }
 
   private async applyBackgroundStrategies(): Promise<boolean> {
-    if (!CoreService.appInBackground) {
+    if (!this.runtimeStateStore.isDesiredRunning() || !this.isCoreActive()) {
       return true;
     }
     const locationEnabled = this.runtimeStateStore.isSimulatedLocationEnabled();
@@ -300,7 +291,7 @@ export class CoreService {
       simulatedLocation: locationEnabled
     };
     const continuousTaskAvailable = await this.backgroundKeepAlive.configure(options);
-    if (!CoreService.appInBackground) {
+    if (!this.runtimeStateStore.isDesiredRunning() || !this.isCoreActive()) {
       await this.backgroundKeepAlive.stop();
       this.backgroundLocation.stop();
       return false;
