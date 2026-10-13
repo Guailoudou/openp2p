@@ -51,8 +51,6 @@ OpenHarmony-SIG Go + OHOS Native SDK + OpenP2P Go 源码
  ArkTS → libentry.so → dlopen/dlsym → libopenp2p_ohos.so
 ```
 
-当前工程是原生 ArkTS 前端，不需要 Flutter SDK，也不需要执行 `flutter pub get`。
-
 ## 2. 当前构建基线
 
 | 项目 | 当前配置 | 说明 |
