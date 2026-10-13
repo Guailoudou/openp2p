@@ -107,6 +107,11 @@ export interface SdwanMember {
 }
 
 export interface SdwanConfig {
+  id?: number;
+  name?: string;
+  enable?: number;
+  tunnelNum?: number;
+  mtu?: number;
   gateway: string;
   mode: string;
   centralNode: string;

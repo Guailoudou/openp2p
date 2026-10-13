@@ -97,14 +97,8 @@ export struct NetworkPage {
         return false;
       }
       this.devices = devices;
-      this.config = {
-        gateway: config.gateway,
-        mode: config.mode,
-        centralNode: config.centralNode,
-        forceRelay: config.forceRelay,
-        punchPriority: config.punchPriority,
-        Nodes: refreshedNodes
-      };
+      config.Nodes = refreshedNodes;
+      this.config = config;
       return true;
     } catch (error) {
       if (this.isCurrentRefresh(refreshId)) {
@@ -161,6 +155,11 @@ export struct NetworkPage {
 
   private refreshConfig(): void {
     const updated: SdwanConfig = {
+      id: this.config.id,
+      name: this.config.name,
+      enable: this.config.enable,
+      tunnelNum: this.config.tunnelNum,
+      mtu: this.config.mtu,
       gateway: this.config.gateway,
       mode: this.config.mode,
       centralNode: this.config.centralNode,
