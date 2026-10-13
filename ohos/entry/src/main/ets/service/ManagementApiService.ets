@@ -145,7 +145,7 @@ export class ManagementApiService {
 
   async checkRemote(peerNode: string, edgeServer: string, host: string, port: number): Promise<RemoteCheckResponse> {
     const body: RemoteCheckRequest = { host: host, port: port };
-    return this.push<RemoteCheckResponse>(peerNode, 19, 1, edgeServer, body);
+    return this.push<RemoteCheckResponse>(peerNode, 19, 1, edgeServer, body, false);
   }
 
   async saveSdwan(config: SdwanConfig): Promise<ApiResult> {
@@ -161,14 +161,14 @@ export class ManagementApiService {
   }
 
   private async push<T>(name: string, subtype: number, rsp: number, edgeServer: string,
-    body?: Object): Promise<T> {
+    body?: Object, checkBusinessError: boolean = true): Promise<T> {
     const path = `/api/v1/device/${encodeURIComponent(name)}/push?subtype=${subtype}&rsp=${rsp}` +
       `&edgeserver=${encodeURIComponent(edgeServer)}`;
-    return this.request<T>(path, http.RequestMethod.POST, body);
+    return this.request<T>(path, http.RequestMethod.POST, body, true, checkBusinessError);
   }
 
   private async request<T>(path: string, method: http.RequestMethod, body?: Object,
-    authenticated: boolean = true): Promise<T> {
+    authenticated: boolean = true, checkBusinessError: boolean = true): Promise<T> {
     const request = http.createHttp();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json'
@@ -217,10 +217,13 @@ export class ManagementApiService {
         const parsedCode = Number(businessError);
         businessErrorCode = Number.isNaN(parsedCode) ? 1 : parsedCode;
       }
-      if (businessErrorCode !== 0) {
+      if (checkBusinessError && businessErrorCode !== 0) {
         const detailValue = parsed['message'] ? parsed['message'] : parsed['msg'];
         const detail = typeof detailValue === 'string' && detailValue.length > 0 ? `: ${detailValue}` : '';
         throw new Error(`管理服务操作失败 (${businessErrorCode})${detail}`);
+      }
+      if (!checkBusinessError) {
+        parsed['error'] = businessErrorCode;
       }
       return parsed as T;
     } finally {

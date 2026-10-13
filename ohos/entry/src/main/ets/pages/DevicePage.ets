@@ -431,6 +431,13 @@ export struct DevicePage {
   }
 
   private openMappingEditor(index: number): void {
+    if (index < 0) {
+      const device = this.selectedDevice();
+      if (!device || device.isActive !== 1) {
+        this.showToast('设备离线');
+        return;
+      }
+    }
     this.selectedMappingIndex = index;
     if (index >= 0) {
       const mapping = this.mappings[index];
@@ -557,7 +564,7 @@ export struct DevicePage {
     try {
       const response = await this.session.api.checkRemote(this.mappingPeerNode,
         this.edgeServer(this.mappingPeerNode), this.mappingTargetHost, Number(this.mappingTargetPort));
-      this.showToast(response.error ? '远端服务不可达' : '远端服务可达');
+      this.showToast(response.error ? '目标连接失败，请检测地址和端口是否正确' : '远端服务可达');
     } catch (error) {
       this.showToast(`检测失败：${String(error)}`);
     }
