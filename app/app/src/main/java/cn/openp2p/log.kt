@@ -88,11 +88,10 @@ object Logger {
 
     @Synchronized
     fun currentSession(): String = buildString {
-        sessionFiles().forEach { file ->
+        sessionFiles().filter { it.name == "openp2p.log" }.forEach { file ->
             val content = readTail(file, sessionOffsets[file.name] ?: 0, MAX_VIEW_BYTES)
             if (content.isNotBlank()) {
                 if (isNotEmpty()) appendLine()
-                appendLine("===== ${file.name} =====")
                 append(content)
             }
         }

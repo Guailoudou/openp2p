@@ -9,14 +9,11 @@ import android.view.Gravity
 import android.view.Menu
 import android.view.View
 import android.widget.LinearLayout
-import android.widget.RadioButton
-import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import androidx.appcompat.widget.PopupMenu
 import androidx.lifecycle.lifecycleScope
-import androidx.core.view.ViewCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import cn.openp2p.R
 import cn.openp2p.management.Device
@@ -28,14 +25,18 @@ import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-class NetworkScreen(private val activity: MainActivity, private val session: ManagementSession) {
+class NetworkScreen(private val activity: MainActivity, private val session: ManagementSession,
+    restored: Snapshot? = null) {
+    data class Snapshot(val username: String, val config: SdwanConfig, val devices: List<Device>, val error: String?)
+
+    private val restoredState = restored?.takeIf { it.username == session.username }
     val view: View
     private val swipe = SwipeRefreshLayout(activity)
     private val body = LinearLayout(activity)
-    private var config = SdwanConfig()
-    private var devices: List<Device> = emptyList()
-    private var firstLoad = true
-    private var errorMessage: String? = null
+    private var config = restoredState?.config?.snapshot() ?: SdwanConfig()
+    private var devices: List<Device> = restoredState?.devices ?: emptyList()
+    private var firstLoad = restoredState == null
+    private var errorMessage: String? = restoredState?.error
     private val memberIpViews = mutableMapOf<String, TextView>()
     private var refreshSequence = 0
     private var activeRefreshId = 0
@@ -60,7 +61,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
         val header = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         header.addView(TextView(activity).apply {
             text = activity.getString(R.string.nav_network)
-            textSize = 28f
+            textSize = 30f
             setTextColor(activity.color(R.color.text_primary))
             setTypeface(typeface, Typeface.BOLD)
             setPadding(activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), activity.dp(20), activity.dp(16), 0)
@@ -71,19 +72,29 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
             setTextColor(activity.color(R.color.text_secondary))
             setPadding(activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), activity.dp(4), activity.dp(16), activity.dp(12))
         })
-        root.addView(activity.centered(header))
         body.orientation = LinearLayout.VERTICAL
-        body.setPadding(activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), 0, activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), activity.dp(32))
+        body.setPadding(activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), 0, activity.resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), activity.dp(128))
         swipe.setColorSchemeColors(activity.color(R.color.brand_primary))
-        swipe.addView(ScrollView(activity).apply { addView(body) })
+        swipe.addView(ScrollView(activity).apply {
+            isFillViewport = true
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(header)
+                addView(body)
+            })
+        })
         swipe.setOnRefreshListener { load() }
         root.addView(activity.centered(swipe, fillHeight = true), LinearLayout.LayoutParams(-1, 0, 1f))
         view = root
         render()
-        load()
+        if (restoredState == null) load()
     }
 
+    fun snapshot(): Snapshot? = if (firstLoad) null else
+        Snapshot(session.username, config.snapshot(), devices.map { it.copy() }, errorMessage)
+
     private fun load() {
+        if (activeRefreshId != 0) return
         val manualRefresh = !firstLoad
         if (manualRefresh) swipe.isRefreshing = true
         val refreshId = ++refreshSequence
@@ -109,7 +120,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
             } catch (e: Exception) {
                 if (activeRefreshId != refreshId) return@launch
                 errorMessage = e.message ?: activity.getString(R.string.load_failed)
-                if (!manualRefresh) swipe.isRefreshing = false
+                swipe.isRefreshing = false
             }
             if (activeRefreshId != refreshId) return@launch
             activeRefreshId = 0
@@ -122,7 +133,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
         body.removeAllViews()
         memberIpViews.clear()
         if (firstLoad) { body.loadingState(); return }
-        errorMessage?.let { body.errorState(it) { load() }; return }
+        errorMessage?.let { body.errorState(it) { load() } }
         var gatewayInput: TextInputEditText? = null
         val settingsCard = activity.card {
             label(activity.getString(R.string.network_settings)).apply {
@@ -160,7 +171,28 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
             addView(modeRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(12) })
 
             val nodeLabel = activity.getString(if (config.mode == "central") R.string.central_node else R.string.specified_relay_node)
-            secondaryAction("$nodeLabel · ${config.centralNode.ifBlank { activity.getString(R.string.not_specified) }}") {
+            val nodeRow = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL }
+            nodeRow.addView(TextView(activity).apply {
+                text = nodeLabel
+                textSize = 16f
+                setTextColor(activity.color(R.color.text_primary))
+            }, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = activity.dp(12) })
+            val nodeButton = MaterialButton(activity).apply {
+                text = config.centralNode.ifBlank { activity.getString(R.string.not_specified) }
+                contentDescription = "$nodeLabel: $text"
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                setTextColor(activity.color(if (config.centralNode.isBlank()) R.color.text_primary else R.color.brand_primary))
+                backgroundTintList = ColorStateList.valueOf(if (config.centralNode.isBlank())
+                    activity.color(R.color.surface_page) else AppearancePreferences.softColor(activity))
+                setIconResource(R.drawable.ic_chevron_right)
+                iconGravity = MaterialButton.ICON_GRAVITY_END
+                iconSize = activity.dp(18)
+                iconPadding = activity.dp(8)
+                iconTint = ColorStateList.valueOf(activity.color(R.color.brand_primary))
+            }
+            nodeButton.setOnClickListener {
                 val options = listOf<String?>(null) + config.nodes.map { it.name }.distinct()
                 activity.wheelPicker(nodeLabel, options.map { it ?: activity.getString(R.string.not_specified) },
                     options.indexOf(config.centralNode.ifBlank { null }).coerceAtLeast(0)) { index ->
@@ -168,6 +200,8 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                     render()
                 }
             }
+            nodeRow.addView(nodeButton, LinearLayout.LayoutParams(activity.dp(180), activity.dp(48)))
+            addView(nodeRow, LinearLayout.LayoutParams(-1, -2))
             if (config.mode != "central") {
                 addView(Switch(activity).apply {
                     text = activity.getString(R.string.force_relay)
@@ -180,12 +214,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
             }
             val priorities = activity.punchPriorityOptions()
             val selectedPriority = config.punchPriority.coerceIn(0, priorities.lastIndex)
-            secondaryAction("${activity.getString(R.string.punch_priority)} · ${priorities[selectedPriority]}") {
-                activity.wheelPicker(activity.getString(R.string.punch_priority), priorities, selectedPriority) { index ->
-                    config.punchPriority = index
-                    render()
-                }
-            }
+            selector(activity.getString(R.string.punch_priority), priorities, selectedPriority) { config.punchPriority = it }
         }
 
         val membersCard = activity.card {
@@ -211,7 +240,6 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                         typeface = Typeface.MONOSPACE
                         memberIpViews[member.name] = this
                     }
-                    if (member.resource.isNotBlank()) label(member.resource, true)
                     minimumHeight = activity.dp(72)
                     setOnClickListener { editMember(member) }
                     setOnLongClickListener { anchor -> showMemberMenu(anchor, member); true }
@@ -273,10 +301,16 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
 
     private fun showMemberMenu(anchor: View, member: SdwanMember) {
         PopupMenu(activity, anchor).apply {
+            menu.add(Menu.NONE, 0, 0, R.string.copy_virtual_ip)
             menu.add(Menu.NONE, 1, 0, R.string.edit)
             menu.add(Menu.NONE, 2, 1, R.string.remove_from_network)
             setOnMenuItemClickListener {
                 when (it.itemId) {
+                    0 -> {
+                        (activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager)
+                            .setPrimaryClip(android.content.ClipData.newPlainText(activity.getString(R.string.virtual_ip), member.ip))
+                        view.toast(activity.getString(R.string.virtual_ip_copied))
+                    }
                     1 -> editMember(member)
                     2 -> requestRemoveMember(member)
                 }
@@ -287,8 +321,6 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
     }
 
     private fun requestRemoveMember(member: SdwanMember) {
-        activity.confirm(activity.getString(R.string.remove_from_network),
-            activity.getString(R.string.remove_member_confirm, member.name), activity.getString(R.string.remove), true) {
             val previous = config.snapshot()
             config.nodes.removeAll { it.name == member.name }
             if (config.centralNode == member.name) config.centralNode = ""
@@ -297,87 +329,26 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                 config = previous
                 render()
             }) { load() }
-        }
-    }
-
-    private fun editNetworkConfig() {
-        val draft = config.copy(nodes = config.nodes.map { it.copy() }.toMutableList())
-        activity.bottomSheet(activity.getString(R.string.edit_network_config)) { dialog ->
-            val gateway = field(activity.getString(R.string.network_address), draft.gateway)
-            sectionHeader(activity.getString(R.string.network_mode))
-            val mode = RadioGroup(activity).apply { orientation = RadioGroup.VERTICAL }
-            val full = RadioButton(activity).apply { text = activity.getString(R.string.network_mode_fullmesh); id = ViewCompat.generateViewId(); minHeight = activity.dp(48); AppearancePreferences.tint(this) }
-            val central = RadioButton(activity).apply { text = activity.getString(R.string.network_mode_central); id = ViewCompat.generateViewId(); minHeight = activity.dp(48); AppearancePreferences.tint(this) }
-            mode.addView(full); mode.addView(central)
-            mode.check(if (draft.mode == "central") central.id else full.id)
-            addView(mode)
-            var centralNode = draft.centralNode
-            val centralButton = secondaryAction("") {}
-            sectionHeader(activity.getString(R.string.force_relay))
-            val relay = Switch(activity).apply { text = activity.getString(R.string.force_relay); textSize = 16f; isChecked = draft.forceRelay != 0; minHeight = activity.dp(48); AppearancePreferences.tint(this) }
-            addView(relay)
-            fun updateModeControls() {
-                val label = activity.getString(
-                    if (mode.checkedRadioButtonId == central.id) R.string.central_node else R.string.specified_relay_node
-                )
-                centralButton.text = "$label · ${centralNode.ifBlank { activity.getString(R.string.not_specified) }}"
-                relay.visibility = if (mode.checkedRadioButtonId == central.id) View.GONE else View.VISIBLE
-            }
-            centralButton.setOnClickListener {
-                val options = listOf<String?>(null) + draft.nodes.map { it.name }.distinct()
-                val label = activity.getString(
-                    if (mode.checkedRadioButtonId == central.id) R.string.central_node else R.string.specified_relay_node
-                )
-                activity.wheelPicker(label, options.map { it ?: activity.getString(R.string.not_specified) }, options.indexOf(centralNode.ifBlank { null }).coerceAtLeast(0)) {
-                    centralNode = options[it].orEmpty()
-                    centralButton.text = "$label · ${centralNode.ifBlank { activity.getString(R.string.not_specified) }}"
-                }
-            }
-            mode.setOnCheckedChangeListener { _, _ -> updateModeControls() }
-            updateModeControls()
-            val priorities = activity.punchPriorityOptions()
-            var priority = draft.punchPriority.coerceIn(0, priorities.lastIndex)
-            val priorityButton = secondaryAction("${activity.getString(R.string.punch_priority)} · ${priorities[priority]}") {}
-            priorityButton.setOnClickListener { activity.wheelPicker(activity.getString(R.string.punch_priority), priorities, priority) { priority = it; priorityButton.text = "${activity.getString(R.string.punch_priority)} · ${priorities[it]}" } }
-            val save = action(activity.getString(R.string.save_network_config)) {}
-            save.setOnClickListener {
-                val address = gateway.text?.toString()?.trim().orEmpty()
-                if (address.isBlank()) { gateway.showError(activity.getString(R.string.network_address_required)); return@setOnClickListener }
-                if (!isCidr(address)) { gateway.showError(activity.getString(R.string.network_address_invalid)); return@setOnClickListener }
-                val centralMode = mode.checkedRadioButtonId == central.id
-                if (centralMode && centralNode.isBlank()) { view.snack(activity.getString(R.string.central_node_required)); return@setOnClickListener }
-                updateMemberGateway(draft, address)
-                draft.mode = if (centralMode) "central" else "fullmesh"
-                draft.centralNode = centralNode
-                draft.forceRelay = if (relay.isChecked) 1 else 0
-                draft.punchPriority = priority
-                persistConfig(draft.snapshot(), save) {
-                    config = draft
-                    dialog.dismiss()
-                    load()
-                }
-            }
-        }
     }
 
     private fun chooseAvailableDevice() {
         val options = availableDevices()
         if (options.isEmpty()) { view.snack(activity.getString(R.string.no_eligible_device)); return }
-        activity.wheelPicker(activity.getString(R.string.add_device), options.map { it.remark.ifBlank { it.name } }) { index ->
+        activity.wheelPicker(activity.getString(R.string.add_device), options.map { it.name }) { index ->
             val device = options[index]
             val address = nextAvailableAddress(config)
             if (address.isBlank()) { view.toast(activity.getString(R.string.no_available_virtual_ip)); return@wheelPicker }
             val member = SdwanMember(device.name, address, active = device.active)
             config.nodes += member
-            editMember(member, true)
+            render()
+            editMember(member)
         }
     }
 
-    private fun editMember(member: SdwanMember, isNew: Boolean = false) {
+    private fun editMember(member: SdwanMember) {
         val originalIp = member.ip
         val originalResource = member.resource
-        activity.bottomSheet(activity.getString(R.string.network_member)) { dialog ->
-            label(member.name)
+        activity.bottomSheet(member.name, large = true) { dialog ->
             val ip = field(activity.getString(R.string.virtual_ip), member.ip)
             val resources = field(activity.getString(R.string.resources), member.resource)
             val status = label("", true)
@@ -393,7 +364,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                     try {
                         val result = session.api.memberStatus(device)
                         val error = result.optString("tunError")
-                        status.text = if (error.isBlank()) activity.getString(R.string.node_healthy)
+                        status.text = if (error.isBlank()) ""
                         else activity.getString(R.string.tun_error, error)
                         status.setTextColor(activity.color(if (error.isBlank()) R.color.state_success else R.color.state_error))
                         val apps = result.optJSONArray("Apps")
@@ -429,7 +400,6 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                     }
                 }
             }
-            secondaryAction(activity.getString(R.string.check_status)) { loadStatus() }
             val save = action(activity.getString(R.string.save_member)) {}
             save.setOnClickListener {
                 val address = ip.text?.toString()?.trim().orEmpty()
@@ -443,7 +413,6 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                         persistConfig(config.snapshot(), save, R.string.save_member, failed = {
                             member.ip = originalIp
                             member.resource = originalResource
-                            if (isNew) config.nodes.remove(member)
                             render()
                         }) {
                             dialog.dismiss()
@@ -452,21 +421,9 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                     }
                 }
             }
-            destructiveAction(activity.getString(R.string.remove_from_network)) {
-                dialog.dismiss()
-                requestRemoveMember(member)
-            }
-            dialog.setOnCancelListener {
-                member.ip = originalIp
-                member.resource = originalResource
-                if (isNew) config.nodes.remove(member)
-                render()
-            }
             loadStatus()
         }
     }
-
-    private fun SdwanConfig.snapshot() = copy(nodes = nodes.map { it.copy() }.toMutableList())
 
     private fun persistConfig(
         value: SdwanConfig,
@@ -475,6 +432,16 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
         failed: (() -> Unit)? = null,
         complete: () -> Unit
     ) {
+        if (!isCidr(value.gateway)) {
+            view.toast(activity.getString(R.string.network_address_invalid))
+            failed?.invoke()
+            return
+        }
+        if (value.mode == "central" && value.centralNode.isBlank()) {
+            view.toast(activity.getString(R.string.central_node_required))
+            failed?.invoke()
+            return
+        }
         val idleText = activity.getString(idleTextRes)
         button?.setLoading(true, idleText, activity.getString(R.string.please_wait))
         activity.lifecycleScope.launch {

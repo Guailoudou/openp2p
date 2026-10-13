@@ -1,0 +1,7 @@
+<resources>
+    <style name="Widget.OpenP2P.Button" parent="Widget.OpenP2P.Button.Base">
+        <item name="android:elevation">0dp</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+</resources>

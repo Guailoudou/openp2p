@@ -34,4 +34,6 @@ data class SdwanConfig(
     var gateway: String = "10.0.0.0/24", var mode: String = "fullmesh",
     var centralNode: String = "", var forceRelay: Int = 0, var punchPriority: Int = 0,
     val nodes: MutableList<SdwanMember> = mutableListOf()
-)
+) {
+    fun snapshot() = copy(nodes = nodes.map { it.copy() }.toMutableList())
+}

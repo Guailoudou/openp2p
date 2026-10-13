@@ -11,6 +11,7 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.core.widget.NestedScrollView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.RadioButton
@@ -45,7 +46,13 @@ fun Context.dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 fun Context.color(@ColorRes value: Int) = AppearancePreferences.resolve(this, value)
 
 fun Context.centered(view: View, maxWidthDp: Int = 1240, fillHeight: Boolean = false): FrameLayout = FrameLayout(this).apply {
-    val childWidth = if (resources.configuration.screenWidthDp > maxWidthDp) dp(maxWidthDp) else ViewGroup.LayoutParams.MATCH_PARENT
+    val screenWidth = resources.configuration.screenWidthDp
+    val contentWidth = if (maxWidthDp == 1240) when {
+        screenWidth >= 1600 -> screenWidth * 2 / 3
+        screenWidth >= 840 -> screenWidth * 5 / 6
+        else -> screenWidth
+    } else minOf(screenWidth, maxWidthDp)
+    val childWidth = dp(contentWidth)
     addView(view, FrameLayout.LayoutParams(
         childWidth,
         if (fillHeight) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -57,13 +64,15 @@ fun Context.page(
     title: String,
     actionIcon: Int? = null,
     actionDescription: String? = null,
+    subtitle: String = "",
+    scrollHeader: Boolean = true,
     onAction: (() -> Unit)? = null
 ): Pair<LinearLayout, LinearLayout> {
     val root = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setBackgroundColor(color(R.color.surface_page))
     }
-    root.addView(LinearLayout(this).apply {
+    val header = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         setPadding(
@@ -72,37 +81,50 @@ fun Context.page(
             resources.getDimensionPixelSize(R.dimen.page_horizontal_margin),
             dp(12)
         )
-        addView(TextView(context).apply {
+        val heading = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        heading.addView(TextView(context).apply {
             text = title
-            textSize = 28f
+            textSize = 30f
             setTextColor(color(R.color.text_primary))
             setTypeface(typeface, Typeface.BOLD)
-        }, LinearLayout.LayoutParams(0, -2, 1f))
+        })
+        if (subtitle.isNotEmpty()) heading.addView(TextView(context).apply {
+            text = subtitle
+            textSize = 14f
+            setTextColor(color(R.color.text_secondary))
+            setPadding(0, dp(6), 0, dp(4))
+        })
+        addView(heading, LinearLayout.LayoutParams(0, -2, 1f))
         if (actionIcon != null && onAction != null) addView(MaterialButton(context).apply {
             minWidth = dp(48)
             minimumWidth = dp(48)
             minHeight = dp(48)
             icon = ContextCompat.getDrawable(context, actionIcon)
+            iconSize = dp(22)
+            iconPadding = 0
+            iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+            setPadding(0, 0, 0, 0)
             iconTint = ColorStateList.valueOf(color(R.color.text_primary))
             contentDescription = actionDescription
-            cornerRadius = dp(16)
+            cornerRadius = dp(24)
             backgroundTintList = ColorStateList.valueOf(color(R.color.surface_card))
             setOnClickListener { onAction() }
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
-    })
+    }
+    if (!scrollHeader) root.addView(centered(header))
     val body = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(
             resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), dp(4),
-            resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), dp(32)
+            resources.getDimensionPixelSize(R.dimen.page_horizontal_margin), dp(128)
         )
     }
-    val centered = FrameLayout(this).apply {
-        addView(body, FrameLayout.LayoutParams(-1, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
-            val max = resources.getDimensionPixelSize(R.dimen.content_max_width)
-            if (resources.displayMetrics.widthPixels > max) width = max
-        })
+    val scrollContent = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        if (scrollHeader) addView(header)
+        addView(body)
     }
+    val centered = centered(scrollContent)
     root.addView(ScrollView(this).apply {
         isFillViewport = true
         clipToPadding = false
@@ -114,13 +136,13 @@ fun Context.page(
 fun Context.card(content: LinearLayout.() -> Unit): MaterialCardView = MaterialCardView(this).apply {
     radius = resources.getDimension(R.dimen.card_radius)
     cardElevation = 0f
-    strokeWidth = dp(1)
-    strokeColor = color(R.color.border_default)
+    maxCardElevation = 0f
+    strokeWidth = 0
     setCardBackgroundColor(color(R.color.surface_card))
     isFocusable = true
     addView(LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(16), dp(16), dp(16), dp(16))
+        setPadding(dp(20), dp(20), dp(20), dp(20))
         content()
     })
 }
@@ -178,17 +200,10 @@ fun LinearLayout.keyValue(labelValue: String, value: String, mono: Boolean = fal
 
 fun Context.statusChip(textValue: String, status: AppStatus): TextView = TextView(this).apply {
     text = textValue
-    textSize = 12f
+    textSize = 13f
     gravity = Gravity.CENTER
-    setTypeface(typeface, Typeface.BOLD)
     setTextColor(color(status.color))
-    setPadding(dp(10), dp(5), dp(10), dp(5))
-    minHeight = dp(32)
-    background = GradientDrawable().apply {
-        cornerRadius = dp(999).toFloat()
-        setColor(color(R.color.surface_subtle))
-        setStroke(dp(1), color(status.color))
-    }
+    setPadding(dp(4), dp(4), dp(4), dp(4))
 }
 
 fun LinearLayout.field(
@@ -200,7 +215,9 @@ fun LinearLayout.field(
 ): TextInputEditText {
     val layout = TextInputLayout(context).apply {
         hint = label
-        boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
+        boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_FILLED
+        boxBackgroundColor = context.color(R.color.surface_subtle)
+        setBoxCornerRadii(context.dp(14).toFloat(), context.dp(14).toFloat(), context.dp(14).toFloat(), context.dp(14).toFloat())
         helperText = helper
         isHintAnimationEnabled = true
         boxStrokeColor = context.color(R.color.brand_primary)
@@ -217,6 +234,11 @@ fun LinearLayout.field(
         minHeight = context.dp(48)
     }
     layout.addView(edit)
+    edit.addTextChangedListener(object : android.text.TextWatcher {
+        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { layout.error = null }
+        override fun afterTextChanged(s: android.text.Editable?) = Unit
+    })
     addView(layout, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = context.dp(12) })
     return edit
 }
@@ -233,19 +255,20 @@ fun LinearLayout.destructiveAction(textValue: String, onClick: () -> Unit): Mate
 
 private fun LinearLayout.button(textValue: String, status: AppStatus, onClick: () -> Unit): MaterialButton = MaterialButton(context).also {
     it.text = textValue
-    it.cornerRadius = context.dp(12)
+    it.cornerRadius = context.dp(14)
     it.minHeight = context.dp(48)
     if (status == AppStatus.INFO) {
         it.setTextColor(context.color(R.color.brand_on_primary))
         it.backgroundTintList = ColorStateList.valueOf(context.color(R.color.brand_primary))
     } else {
-        it.setTextColor(context.color(status.color))
-        it.backgroundTintList = ColorStateList.valueOf(context.color(R.color.surface_subtle))
-        it.strokeColor = ColorStateList.valueOf(context.color(status.color))
-        it.strokeWidth = context.dp(1)
+        it.setTextColor(context.color(if (status == AppStatus.NEUTRAL) R.color.brand_primary else status.color))
+        it.backgroundTintList = ColorStateList.valueOf(
+            if (status == AppStatus.ERROR) android.graphics.Color.TRANSPARENT else AppearancePreferences.softColor(context)
+        )
+        it.strokeWidth = 0
     }
     it.setOnClickListener { onClick() }
-    addView(it, LinearLayout.LayoutParams(-1, context.dp(52)).apply { topMargin = context.dp(8) })
+    addView(it, LinearLayout.LayoutParams(-1, context.dp(48)).apply { topMargin = context.dp(8) })
 }
 
 fun MaterialButton.setLoading(loading: Boolean, normalText: CharSequence, loadingText: CharSequence) {
@@ -286,26 +309,21 @@ fun LinearLayout.errorState(message: String, retry: () -> Unit) {
     })
 }
 
-fun Context.bottomSheet(title: String, content: LinearLayout.(BottomSheetDialog) -> Unit): BottomSheetDialog {
+fun Context.bottomSheet(title: String, large: Boolean = false, content: LinearLayout.(BottomSheetDialog) -> Unit): BottomSheetDialog {
     val dialog = BottomSheetDialog(this)
-    var gestureStartY = 0f
-    val scroll = ScrollView(this).apply {
+    dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+    val scroll = NestedScrollView(this).apply {
         isFillViewport = true
-        setOnTouchListener { _, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> gestureStartY = event.rawY
-                MotionEvent.ACTION_MOVE -> if (event.rawY - gestureStartY > dp(72)) {
-                    dialog.dismiss()
-                    gestureStartY = event.rawY
-                }
-            }
-            false
-        }
     }
     val body = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setBackgroundColor(color(R.color.surface_card))
         setPadding(dp(20), dp(16), dp(20), dp(32))
+        addView(View(context).apply {
+            background = GradientDrawable().apply {
+                setColor(color(R.color.border_default)); cornerRadius = dp(2).toFloat()
+            }
+        }, LinearLayout.LayoutParams(dp(36), dp(4)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(16) })
         label(title).apply { textSize = 22f; setTypeface(typeface, Typeface.BOLD) }
         content(dialog)
     }
@@ -314,8 +332,13 @@ fun Context.bottomSheet(title: String, content: LinearLayout.(BottomSheetDialog)
     dialog.setOnShowListener {
         dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { sheet ->
             sheet.setBackgroundColor(color(R.color.surface_card))
-            BottomSheetBehavior.from(sheet).state = BottomSheetBehavior.STATE_EXPANDED
-            sheet.layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
+            androidx.core.view.ViewCompat.setElevation(sheet, 0f)
+            sheet.layoutParams.height = (resources.displayMetrics.heightPixels * if (large) 0.9f else 0.6f).toInt()
+            BottomSheetBehavior.from(sheet).apply {
+                state = BottomSheetBehavior.STATE_EXPANDED
+                skipCollapsed = true
+            }
+            sheet.requestLayout()
         }
     }
     dialog.show()
@@ -336,36 +359,36 @@ fun Context.wheelPicker(title: String, values: List<String>, selected: Int = 0, 
         Toast.makeText(this, R.string.no_options, Toast.LENGTH_SHORT).show()
         return
     }
-    var choice = selected.coerceIn(0, values.lastIndex)
-    val radios = mutableListOf<RadioButton>()
-    val choices = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(12), dp(4), dp(12), dp(4))
+    val picker = android.widget.NumberPicker(this).apply {
+        minValue = 0
+        maxValue = values.lastIndex
+        displayedValues = values.toTypedArray()
+        value = selected.coerceIn(0, values.lastIndex)
+        wrapSelectorWheel = false
+        descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        contentDescription = title
     }
-    values.forEachIndexed { index, value ->
-        val radio = RadioButton(this).apply {
-            text = value
-            textSize = 16f
-            minHeight = dp(52)
-            isChecked = index == choice
-            setTextColor(color(R.color.text_primary))
-            AppearancePreferences.tint(this)
-            setOnClickListener {
-                choice = index
-                radios.forEachIndexed { itemIndex, item -> item.isChecked = itemIndex == index }
-            }
-        }
-        radios += radio
-        choices.addView(radio, LinearLayout.LayoutParams(-1, -2))
-    }
-    val scroll = ScrollView(this).apply { addView(choices) }
-    val dialog = AlertDialog.Builder(this).setTitle(title).setView(scroll)
-        .setNegativeButton(R.string.cancel, null).setPositiveButton(R.string.confirm) { _, _ -> chosen(choice) }.create()
+    val dialog = AlertDialog.Builder(this).setTitle(title).setView(picker)
+        .setNegativeButton(R.string.cancel, null).setPositiveButton(R.string.confirm) { _, _ -> chosen(picker.value) }.create()
     dialog.setOnShowListener {
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(AppearancePreferences.color(this))
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(AppearancePreferences.color(this))
     }
     dialog.show()
+}
+
+fun LinearLayout.selector(title: String, values: List<String>, selected: Int, chosen: (Int) -> Unit) {
+    label(title, true)
+    addView(android.widget.Spinner(context).apply {
+        contentDescription = title
+        minimumHeight = context.dp(48)
+        adapter = android.widget.ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item, values)
+        setSelection(selected.coerceIn(0, values.lastIndex))
+        onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) = chosen(position)
+        }
+    }, LinearLayout.LayoutParams(-1, -2))
 }
 
 fun View.snack(message: String, duration: Int = Snackbar.LENGTH_SHORT) = Snackbar.make(this, message, duration).show()
@@ -375,6 +398,7 @@ class SwipeActionLayout(context: Context) : FrameLayout(context) {
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
     private lateinit var foreground: View
     private lateinit var actions: View
+    private var startActions: View? = null
     private var downX = 0f
     private var downY = 0f
     private var startTranslation = 0f
@@ -391,11 +415,13 @@ class SwipeActionLayout(context: Context) : FrameLayout(context) {
         horizontalSwipeStateChanged?.invoke(value)
     }
 
-    fun setViews(content: View, actionView: View) {
+    fun setViews(content: View, actionView: View, startActionView: View? = null) {
         removeAllViews()
         foreground = content
         actions = actionView
+        startActions = startActionView
         addView(actionView, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT, Gravity.END))
+        startActionView?.let { addView(it, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT, Gravity.START)) }
         addView(content, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
     }
 
@@ -406,16 +432,19 @@ class SwipeActionLayout(context: Context) : FrameLayout(context) {
                 downY = event.y
                 startTranslation = if (::foreground.isInitialized) foreground.translationX else 0f
                 setDragging(false)
+                parent?.requestDisallowInterceptTouchEvent(true)
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.x - downX
                 val dy = event.y - downY
+                if (abs(dy) > touchSlop && abs(dy) >= abs(dx)) parent?.requestDisallowInterceptTouchEvent(false)
                 if (abs(dx) > touchSlop && abs(dx) > abs(dy)) {
                     setDragging(true)
                     parent?.requestDisallowInterceptTouchEvent(true)
                     return true
                 }
             }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> parent?.requestDisallowInterceptTouchEvent(false)
         }
         return super.onInterceptTouchEvent(event)
     }
@@ -435,15 +464,21 @@ class SwipeActionLayout(context: Context) : FrameLayout(context) {
                 if (!dragging && abs(dx) > touchSlop && abs(dx) > abs(dy)) setDragging(true)
                 if (dragging) {
                     val width = actions.width.toFloat().coerceAtLeast(0f)
-                    foreground.translationX = (startTranslation + dx).coerceIn(-width, 0f)
+                    foreground.translationX = (startTranslation + dx).coerceIn(-width, startActions?.width?.toFloat() ?: 0f)
                     return true
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 if (dragging) {
                     val width = actions.width.toFloat().coerceAtLeast(0f)
-                    val open = event.actionMasked == MotionEvent.ACTION_UP && foreground.translationX <= -width / 3f
-                    foreground.animate().translationX(if (open) -width else 0f).setDuration(160).start()
+                    val startWidth = startActions?.width?.toFloat() ?: 0f
+                    val target = when {
+                        event.actionMasked == MotionEvent.ACTION_CANCEL -> 0f
+                        foreground.translationX <= -width / 3f -> -width
+                        startWidth > 0 && foreground.translationX >= startWidth / 3f -> startWidth
+                        else -> 0f
+                    }
+                    foreground.animate().translationX(target).setDuration(160).start()
                     setDragging(false)
                     parent?.requestDisallowInterceptTouchEvent(false)
                     return true
@@ -457,8 +492,9 @@ class SwipeActionLayout(context: Context) : FrameLayout(context) {
 fun Context.swipeActions(
     content: View,
     actions: View,
+    startActions: View? = null,
     onHorizontalSwipeStateChanged: (Boolean) -> Unit = {}
 ): SwipeActionLayout = SwipeActionLayout(this).apply {
-    setViews(content, actions)
+    setViews(content, actions, startActions)
     setOnHorizontalSwipeStateChanged(onHorizontalSwipeStateChanged)
 }

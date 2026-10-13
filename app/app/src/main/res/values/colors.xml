@@ -3,17 +3,19 @@
     <color name="brand_primary">#0A59F7</color>
     <color name="brand_primary_dark">#0645C8</color>
     <color name="brand_on_primary">#FFFFFF</color>
-    <color name="surface_page">#F5F7FA</color>
+    <color name="surface_page">#F5F5F7</color>
     <color name="surface_card">#FFFFFF</color>
-    <color name="surface_subtle">#EEF3FA</color>
-    <color name="border_default">#E3E8EF</color>
-    <color name="text_primary">#182431</color>
-    <color name="text_secondary">#637083</color>
-    <color name="state_success">#16855B</color>
-    <color name="state_warning">#B86700</color>
-    <color name="state_error">#C9362B</color>
+    <color name="surface_subtle">#F3F4F6</color>
+    <color name="border_default">#E5E7EB</color>
+    <color name="text_primary">#111827</color>
+    <color name="text_secondary">#6B7280</color>
+    <color name="state_success">#22C55E</color>
+    <color name="state_warning">#F59E0B</color>
+    <color name="state_error">#EF4444</color>
     <color name="state_info">#0A59F7</color>
-    <color name="log_surface">#F9FAFC</color>
+    <color name="log_surface">#111827</color>
+    <color name="log_text">#D1D5DB</color>
+    <color name="log_error">#FCA5A5</color>
     <color name="transparent">#00000000</color>
 
     <!-- Compatibility aliases retained for older screens. -->
