@@ -33,8 +33,8 @@ import com.google.android.material.textfield.TextInputLayout
 import kotlin.math.abs
 
 fun Context.punchPriorityOptions() = listOf(
-    getString(R.string.priority_default), getString(R.string.priority_tcp_first),
-    getString(R.string.priority_tcp_only), getString(R.string.priority_udp_only)
+    "${getString(R.string.priority_tcp_first)} (${getString(R.string.priority_default)})",
+    getString(R.string.priority_udp_first), getString(R.string.priority_tcp_only), getString(R.string.priority_udp_only)
 )
 
 enum class AppStatus(@ColorRes val color: Int) {

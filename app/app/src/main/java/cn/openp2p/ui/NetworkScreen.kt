@@ -20,6 +20,8 @@ import cn.openp2p.management.Device
 import cn.openp2p.management.ManagementSession
 import cn.openp2p.management.SdwanConfig
 import cn.openp2p.management.SdwanMember
+import cn.openp2p.management.punchPriorityOptionIndex
+import cn.openp2p.management.punchPriorityOptionValue
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.launch
@@ -169,6 +171,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
             modeRow.addView(modeButton(activity.getString(R.string.network_mode_central), "central"),
                 LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = activity.dp(4) })
             addView(modeRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = activity.dp(12) })
+            label(activity.getString(R.string.network_mode_tip), true)
 
             val nodeLabel = activity.getString(if (config.mode == "central") R.string.central_node else R.string.specified_relay_node)
             val nodeRow = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -202,6 +205,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
             }
             nodeRow.addView(nodeButton, LinearLayout.LayoutParams(activity.dp(180), activity.dp(48)))
             addView(nodeRow, LinearLayout.LayoutParams(-1, -2))
+            if (config.mode == "central") label(activity.getString(R.string.central_node_tip), true)
             if (config.mode != "central") {
                 addView(Switch(activity).apply {
                     text = activity.getString(R.string.force_relay)
@@ -213,8 +217,8 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                 })
             }
             val priorities = activity.punchPriorityOptions()
-            val selectedPriority = config.punchPriority.coerceIn(0, priorities.lastIndex)
-            selector(activity.getString(R.string.punch_priority), priorities, selectedPriority) { config.punchPriority = it }
+            selector(activity.getString(R.string.punch_priority), priorities,
+                punchPriorityOptionIndex(config.punchPriority)) { config.punchPriority = punchPriorityOptionValue(it) }
         }
 
         val membersCard = activity.card {
@@ -222,6 +226,10 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
                 textSize = 18f
                 setTypeface(typeface, Typeface.BOLD)
             }
+            val versions = config.nodes.mapNotNull { member ->
+                devices.firstOrNull { it.name == member.name }?.version?.takeIf { it.isNotBlank() }
+            }
+            if (versions.distinct().size > 1) label(activity.getString(R.string.member_versions_differ), true)
             if (config.nodes.isEmpty()) {
                 label(activity.getString(R.string.no_members), true).apply {
                     setPadding(0, activity.dp(12), 0, activity.dp(12))
@@ -275,6 +283,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
         val save = body.action(activity.getString(R.string.save_network_config)) {}
         save.setOnClickListener {
             when {
+                config.nodes.size > 10 -> view.snack(activity.getString(R.string.too_many_members))
                 !isCidr(config.gateway) -> gatewayInput?.showError(activity.getString(R.string.network_address_invalid))
                 config.mode == "central" && config.centralNode.isBlank() -> view.snack(activity.getString(R.string.central_node_required))
                 else -> persistConfig(config.snapshot(), save) { load() }
@@ -332,6 +341,7 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
     }
 
     private fun chooseAvailableDevice() {
+        if (config.nodes.size >= 10) { view.snack(activity.getString(R.string.too_many_members)); return }
         val options = availableDevices()
         if (options.isEmpty()) { view.snack(activity.getString(R.string.no_eligible_device)); return }
         activity.wheelPicker(activity.getString(R.string.add_device), options.map { it.name }) { index ->
@@ -350,7 +360,8 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
         val originalResource = member.resource
         activity.bottomSheet(member.name, large = true) { dialog ->
             val ip = field(activity.getString(R.string.virtual_ip), member.ip)
-            val resources = field(activity.getString(R.string.resources), member.resource)
+            val resources = field(activity.getString(R.string.resources), member.resource,
+                helper = activity.getString(R.string.network_resource_tip))
             val status = label("", true)
             val tunnels = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
             addView(tunnels)
@@ -432,6 +443,11 @@ class NetworkScreen(private val activity: MainActivity, private val session: Man
         failed: (() -> Unit)? = null,
         complete: () -> Unit
     ) {
+        if (value.nodes.size > 10) {
+            view.toast(activity.getString(R.string.too_many_members))
+            failed?.invoke()
+            return
+        }
         if (!isCidr(value.gateway)) {
             view.toast(activity.getString(R.string.network_address_invalid))
             failed?.invoke()

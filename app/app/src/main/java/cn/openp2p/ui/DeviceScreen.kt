@@ -17,6 +17,8 @@ import cn.openp2p.R
 import cn.openp2p.management.Device
 import cn.openp2p.management.ManagementSession
 import cn.openp2p.management.PortMapping
+import cn.openp2p.management.punchPriorityOptionIndex
+import cn.openp2p.management.punchPriorityOptionValue
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.switchmaterial.SwitchMaterial
 import kotlinx.coroutines.launch
@@ -381,7 +383,8 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
             }
             sourceRow.addView(protocolColumn, LinearLayout.LayoutParams(activity.dp(112), -2).apply { rightMargin = activity.dp(10) })
             val portColumn = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-            val sourcePort = portColumn.field(activity.getString(R.string.local_port), value.srcPort.toString(), numeric = true)
+            val sourcePort = portColumn.field(activity.getString(R.string.local_port), value.srcPort.toString(), numeric = true,
+                helper = if (device.os.contains("android", ignoreCase = true)) activity.getString(R.string.android_low_port_tip) else null)
             sourceRow.addView(portColumn, LinearLayout.LayoutParams(0, -2, 1f))
             addView(sourceRow)
             var peer = if (old == null) devices.firstOrNull { it.name != device.name }
@@ -389,12 +392,19 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
             if (old == null && value.dstPort == 0) value.dstPort = if (peer?.os?.contains("windows", true) == true) 3389 else 22
             lateinit var destinationPort: android.widget.EditText
             val peerButton = secondaryAction("${activity.getString(R.string.remote_device)} · ${peer?.name ?: activity.getString(R.string.select_value)}") {}
+            val versionWarning = label("", true)
+            fun updateVersionWarning() {
+                versionWarning.text = if (device.version.isNotBlank() && peer?.version?.isNotBlank() == true &&
+                    device.version != peer?.version) activity.getString(R.string.mapping_versions_differ) else ""
+            }
+            updateVersionWarning()
             peerButton.setOnClickListener {
                 val options = devices.filter { it.name != device.name }
                 activity.wheelPicker(activity.getString(R.string.remote_device), options.map { it.name }, options.indexOf(peer).coerceAtLeast(0)) {
                     peer = options[it]
                     if (old == null) destinationPort.setText(if (peer?.os?.contains("windows", true) == true) "3389" else "22")
                     peerButton.text = "${activity.getString(R.string.remote_device)} · ${peer?.name}"
+                    updateVersionWarning()
                 }
             }
             val targetRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
@@ -405,11 +415,14 @@ class DeviceScreen(private val activity: MainActivity, private val session: Mana
             targetRow.addView(hostColumn, LinearLayout.LayoutParams(0, -2, 2f).apply { rightMargin = activity.dp(10) })
             targetRow.addView(targetPortColumn, LinearLayout.LayoutParams(0, -2, 1f))
             addView(targetRow)
-            val whitelist = field(activity.getString(R.string.access_whitelist), value.whitelist)
+            val whitelist = field(activity.getString(R.string.access_whitelist), value.whitelist,
+                helper = activity.getString(R.string.whitelist_tip))
             val relay = field(activity.getString(R.string.relay_node), value.specRelayNode)
             val priorities = activity.punchPriorityOptions()
-            var priority = value.punchPriority.coerceIn(0, priorities.lastIndex)
-            selector(activity.getString(R.string.punch_priority), priorities, priority) { priority = it }
+            var priority = value.punchPriority
+            selector(activity.getString(R.string.punch_priority), priorities, punchPriorityOptionIndex(priority)) {
+                priority = punchPriorityOptionValue(it)
+            }
             val result = label("", true)
             secondaryAction(activity.getString(R.string.check_remote_service)) {
                 val target = peer; val portValue = destinationPort.intValue()

@@ -2,11 +2,22 @@ package cn.parity
 
 import cn.openp2p.management.SdwanConfig
 import cn.openp2p.management.SdwanMember
+import cn.openp2p.management.PortMapping
+import cn.openp2p.management.punchPriorityOptionIndex
+import cn.openp2p.management.punchPriorityOptionValue
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.math.BigInteger
 
 class NetworkConfigTest {
+    @Test fun punchPriorityOptionsUseProtocolValues() {
+        assertEquals(1, PortMapping().punchPriority)
+        assertEquals(1, SdwanConfig().punchPriority)
+        assertEquals(listOf(1, 0, 2, 4), (0..3).map(::punchPriorityOptionValue))
+        assertEquals(listOf(1, 0, 2, 3), listOf(0, 1, 2, 4).map(::punchPriorityOptionIndex))
+        assertEquals(2, punchPriorityOptionIndex(3))
+    }
+
     @Test fun recreationSnapshotKeepsUnsavedValuesWithoutSharingMutableMembers() {
         val original = SdwanConfig("10.1.0.0/24", "central", "peer", 1, 2,
             mutableListOf(SdwanMember("peer", "10.1.0.9", "10.2.0.0/24", true)),

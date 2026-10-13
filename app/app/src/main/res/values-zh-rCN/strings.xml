@@ -3,7 +3,7 @@
     <string name="app_name">OpenP2P</string>
     <string name="prompt_email">邮箱</string>
     <string name="prompt_password">密码</string>
-    <string name="nav_home">主页</string><string name="nav_devices">设备</string><string name="nav_network">网络</string><string name="network_subtitle">管理 SD-WAN 网关、模式与成员</string><string name="nav_logs">日志</string>
+    <string name="nav_home">主页</string><string name="nav_devices">设备</string><string name="nav_network">虚拟网络</string><string name="network_subtitle">管理 SD-WAN 网关、模式与成员</string><string name="nav_logs">日志</string>
     <string name="status_running">已连接</string><string name="status_starting">正在启动</string><string name="status_connecting">连接中</string><string name="status_recovering">恢复中</string><string name="status_stopping">正在停止</string><string name="status_stopped">未启动</string><string name="status_error">启动失败</string>
     <string name="connection_established">核心已成功登录并建立连接</string><string name="connection_stopped_hint">核心尚未启动</string><string name="connection_starting_hint">正在启动 OpenP2P 核心</string><string name="connection_recovering_hint">正在自动恢复 OpenP2P 核心</string><string name="connection_stopping_hint">正在安全断开连接…</string>
     <string name="start_openp2p">启动核心</string><string name="stop_openp2p">停止核心</string><string name="please_wait">请稍候…</string>
@@ -13,13 +13,13 @@
     <string name="first_load">正在加载…</string><string name="retry">重试</string><string name="cancel">取消</string><string name="confirm">确认</string><string name="done">完成</string><string name="no_options">没有可选项</string><string name="operation_failed">操作失败</string><string name="load_failed">数据加载失败</string>
     <string name="devices_title_count">设备 · %1$d</string><string name="filter_all">全部</string><string name="filter_online">在线</string><string name="filter_offline">离线</string><string name="online">在线</string><string name="offline">离线</string><string name="upgrade_available">可升级</string><string name="more_actions">%1$s 的更多操作</string>
     <string name="unknown_system">未知系统</string><string name="unknown_version">未知版本</string><string name="device_system_version">%1$s · %2$s</string><string name="device_addresses">局域网 %1$s  ·  公网 %2$s</string><string name="copy_addresses">长按可复制地址</string><string name="addresses_copied">设备地址已复制</string>
-    <string name="no_devices_title">暂无设备</string><string name="no_devices_message">登录管理中心并添加设备后，会在这里集中管理。</string><string name="open_management_console">打开管理中心</string>
-    <string name="port_mappings">端口映射</string><string name="edit_device">编辑设备</string><string name="upgrade_client">升级客户端</string><string name="restart_device">重启设备</string><string name="delete_device">删除设备</string><string name="device_name">设备名称</string><string name="bandwidth_mbps">带宽（Mbps）</string><string name="public_port">公网端口</string><string name="force_ipv6">强制使用 IPv6</string><string name="save_changes">保存</string><string name="device_name_required">请输入设备名称。</string><string name="device_name_too_short">设备名称不能少于 8 个字符。</string><string name="public_port_invalid">公网端口必须在 0 到 65535 之间。</string><string name="device_offline_mappings">设备离线，无法读取端口映射。</string><string name="save_success">保存成功</string>
+    <string name="no_devices_title">没有安装客户端</string><string name="no_devices_message">请先在设备上安装 OpenP2P 客户端。</string><string name="open_management_console">打开管理中心</string>
+    <string name="port_mappings">端口转发</string><string name="edit_device">编辑设备</string><string name="upgrade_client">升级客户端</string><string name="restart_device">重启设备</string><string name="delete_device">删除设备</string><string name="device_name">设备名字</string><string name="bandwidth_mbps">共享带宽（Mbps）</string><string name="public_port">公网监听端口</string><string name="force_ipv6">强制使用IPv6连接</string><string name="save_changes">保存</string><string name="device_name_required">请输入设备名字。</string><string name="device_name_too_short">设备名字不能少于8个字符</string><string name="public_port_invalid">端口范围0-65535</string><string name="device_offline_mappings">设备离线，无法读取端口转发。</string><string name="save_success">保存成功</string>
     <string name="device_not_upgradeable">当前设备不可升级。</string><string name="upgrade_confirm">将 %1$s 从 %2$s 升级到 %3$s？连接可能暂时中断。</string><string name="upgrade">升级</string><string name="upgrade_sent">升级指令已发送</string><string name="restart_confirm">确定远程重启 %1$s 吗？连接将暂时中断。</string><string name="restart">重启</string><string name="restart_sent">重启指令已发送</string><string name="delete_confirm">确定删除 %1$s 吗？此操作不可撤销。</string><string name="delete">删除</string><string name="device_deleted">设备已删除</string>
-    <string name="no_mappings">暂无端口映射</string><string name="new_mapping">新增端口映射</string><string name="edit_mapping">编辑端口映射</string><string name="unnamed_mapping">未命名映射</string><string name="mapping_route">%1$s  %2$d → %3$s:%4$d</string><string name="enabled">已启用</string><string name="disabled">已停用</string><string name="edit">编辑</string><string name="mapping_delete_confirm">确定删除映射 %1$s 吗？</string><string name="mapping_deleted">映射已删除</string><string name="mapping_status_updated">映射状态已更新</string>
-    <string name="mapping_name">映射名称</string><string name="protocol">协议</string><string name="local_port">本地端口</string><string name="remote_device">远端设备</string><string name="select_value">请选择</string><string name="remote_address">远端地址</string><string name="remote_port">远端端口</string><string name="access_whitelist">访问白名单</string><string name="punch_priority">打洞优先级</string><string name="priority_default">默认</string><string name="priority_tcp_first">TCP 优先</string><string name="priority_tcp_only">仅 TCP</string><string name="priority_udp_only">仅 UDP</string><string name="relay_node">指定中继节点</string><string name="not_specified">不指定</string><string name="check_remote_service">检测远端服务</string><string name="remote_check_invalid">请先选择远端设备并填写有效地址和端口。</string><string name="remote_check_tcp_only">远端服务检测仅支持 TCP</string><string name="remote_reachable">远端服务可达</string><string name="mapping_invalid">映射名称需为 1 到 32 个字符，并请选择设备和有效端口。</string><string name="mapping_port_conflict">该协议的本地端口已被其他映射占用。</string><string name="new_mapping_default_name">新建映射</string><string name="mapping_saved">映射已保存</string>
-    <string name="network_overview">网络概览</string><string name="network_settings">组网设置</string><string name="network_address">网关</string><string name="network_mode">组网模式</string><string name="network_mode_fullmesh">P2P 模式</string><string name="network_mode_central">中心模式</string><string name="member_count">成员数量</string><string name="network_health">健康状态</string><string name="network_ready">配置正常</string><string name="edit_network_config">编辑网络配置</string><string name="central_node">中心节点</string><string name="specified_relay_node">指定中继节点</string><string name="force_relay">强制中继</string><string name="save_network_config">保存网络配置</string><string name="network_address_required">请输入网关。</string><string name="network_address_invalid">请输入 IPv4 CIDR 网关，例如 10.0.0.0/24。</string><string name="central_node_required">请选择中心节点。</string><string name="network_saved">网络配置已保存并下发</string>
-    <string name="network_members">网络成员</string><string name="no_members">暂无成员</string><string name="add_device">加入设备</string><string name="available_devices">可加入设备</string><plurals name="available_device_count"><item quantity="other">当前有 %d 台设备可加入</item></plurals><string name="select_device">选择设备</string><string name="no_eligible_device">没有可加入的设备。设备需在线、版本不低于 3.13，且尚未加入网络。</string><string name="no_available_virtual_ip">当前网段没有可用的虚拟 IP。</string><string name="network_member">网络成员</string><string name="virtual_ip">虚拟 IP</string><string name="resources">可访问资源（可选）</string><string name="check_status">检测状态</string><string name="device_offline">设备当前离线。</string><string name="node_healthy">节点运行正常。</string><string name="check_failed">检测失败</string><string name="save_member">保存成员设置</string><string name="virtual_ip_invalid">请输入有效的 IPv4 地址。</string><string name="virtual_ip_conflict">该虚拟 IP 已被使用。</string><string name="remove_from_network">移出网络</string><string name="remove_member_confirm">确定将 %1$s 移出网络吗？</string><string name="remove">移除</string>
+    <string name="no_mappings">该设备没有创建端口转发</string><string name="new_mapping">新建端口转发</string><string name="edit_mapping">编辑端口转发</string><string name="unnamed_mapping">未命名端口转发</string><string name="mapping_route">%1$s  %2$d → %3$s:%4$d</string><string name="enabled">已启用</string><string name="disabled">未启用</string><string name="edit">编辑</string><string name="mapping_delete_confirm">确定删除端口转发 %1$s 吗？</string><string name="mapping_deleted">删除成功</string><string name="mapping_status_updated">操作成功</string>
+    <string name="mapping_name">端口转发名字</string><string name="protocol">协议</string><string name="local_port">本地端口</string><string name="remote_device">目标设备</string><string name="select_value">请选择</string><string name="remote_address">目标地址</string><string name="remote_port">目标端口</string><string name="access_whitelist">访问白名单</string><string name="punch_priority">打洞协议优先级</string><string name="priority_default">默认</string><string name="priority_tcp_first">TCP优先</string><string name="priority_tcp_only">仅TCP</string><string name="priority_udp_only">仅UDP</string><string name="relay_node">指定中转节点</string><string name="not_specified">不指定</string><string name="check_remote_service">检测远端服务</string><string name="remote_check_invalid">请先选择目标设备并填写有效地址和端口。</string><string name="remote_check_tcp_only">仅支持TCP协议的服务检测</string><string name="remote_reachable">目标连接成功</string><string name="mapping_invalid">端口转发名字需为 1-32 个字符，请选择目标设备和有效端口。</string><string name="mapping_port_conflict">该协议的本地端口已被其他端口转发占用。</string><string name="new_mapping_default_name">新建端口转发</string><string name="mapping_saved">保存成功</string>
+    <string name="network_overview">我的网络</string><string name="network_settings">我的网络</string><string name="network_address">网关</string><string name="network_mode">组网模式</string><string name="network_mode_fullmesh">P2P模式</string><string name="network_mode_central">中心模式</string><string name="member_count">成员数量</string><string name="network_health">健康状态</string><string name="network_ready">配置正常</string><string name="edit_network_config">编辑网络配置</string><string name="central_node">中心节点</string><string name="specified_relay_node">指定中转节点</string><string name="force_relay">强制中转</string><string name="save_network_config">保存网络配置</string><string name="network_address_required">请输入网关。</string><string name="network_address_invalid">网关格式错误，正确格式例如：10.2.3.254/24</string><string name="central_node_required">中心模式必须指定一个中心节点</string><string name="network_saved">保存成功</string>
+    <string name="network_members">网络成员</string><string name="no_members">暂无成员</string><string name="add_device">加入设备</string><string name="available_devices">可加入设备</string><plurals name="available_device_count"><item quantity="other">当前有 %d 台设备可加入</item></plurals><string name="select_device">选择设备</string><string name="no_eligible_device">没有可加入的设备。设备需在线、版本不低于 3.13，且尚未加入网络。</string><string name="no_available_virtual_ip">当前网段没有可用的虚拟IP。</string><string name="network_member">网络成员</string><string name="virtual_ip">虚拟IP</string><string name="resources">网络资源（可选）</string><string name="check_status">检测状态</string><string name="device_offline">设备当前离线。</string><string name="node_healthy">节点运行正常。</string><string name="check_failed">检测失败</string><string name="save_member">保存成员设置</string><string name="virtual_ip_invalid">请输入有效的 IPv4 地址。</string><string name="virtual_ip_conflict">该虚拟IP 已被使用。</string><string name="remove_from_network">移出网络</string><string name="remove_member_confirm">确定将 %1$s 移出网络吗？</string><string name="remove">移除</string>
     <string name="logs_empty">暂无日志</string><string name="auto_scroll">自动滚动</string>
     <string name="account_description">登录后显示设备和网络管理。</string><string name="services_support">服务与支持</string><string name="about">关于</string><string name="about_description">OpenP2P Android 客户端</string><string name="management_console">管理中心</string><string name="management_console_description">打开 console.openpxp.com</string>
     <string name="username">请输入管理账号</string><string name="password">请输入管理密码</string><string name="sign_in_save">保存并登录</string><string name="signing_in">正在登录…</string><string name="login_success">登录成功</string><string name="login_failed">登录失败</string><string name="email">邮箱</string><string name="phone">手机</string><string name="registration_time">注册时间</string><string name="masked_token">••••••••%1$s</string><string name="copy_token">复制 Token</string><string name="token_locked_by_login">OpenP2P Token 已自动同步并锁定</string><string name="token_copied_warning">Token 已复制，请将其作为敏感凭据妥善保管。</string><string name="sign_out">退出登录</string><string name="sign_out_confirm">退出后将隐藏设备和网络页面，确定继续吗？</string>
@@ -35,24 +35,24 @@
     <string name="open_autostart_settings">打开自启动设置</string>
     <string name="open_app_settings">打开应用设置</string>
     <string name="no_browser_available">未找到可用的浏览器。</string>
-    <string name="virtual_ip_outside_network">虚拟 IP 必须位于当前网络地址范围内。</string>
+    <string name="virtual_ip_outside_network">虚拟IP 必须位于当前网络地址范围内。</string>
     <string name="vpn_permission_required">需要重新授权</string>
     <string name="reauthorize_vpn">重新授权 VPN</string>
-    <string name="tunnel_disabled">已停用</string>
+    <string name="tunnel_disabled">未启用</string>
     <string name="tunnel_offline">离线</string>
     <string name="tunnel_failed">连接失败</string>
-    <string name="tunnel_connecting">连接中</string>
-    <string name="tunnel_relay">中继</string>
-    <string name="tunnel_private_relay">中继（私有网络）</string>
+    <string name="tunnel_connecting">正在连接...</string>
+    <string name="tunnel_relay">中转</string>
+    <string name="tunnel_private_relay">私有网络</string>
     <string name="tunnel_direct">直连</string>
-    <string name="tunnel_direct_ipv6">IPv6 直连</string>
+    <string name="tunnel_direct_ipv6">IPv6直连</string>
     <string name="tunnel_direct_intranet">内网直连</string>
     <string name="connect_time">连接时间</string>
     <string name="member_tunnels">连接状态</string>
     <string name="tun_error">TUN 异常：%1$s</string>
     <string name="unknown_device">未知设备</string>
-    <string name="register_account">注册账号</string>
-    <string name="register_title">注册账号</string>
+    <string name="register_account">注册新用户</string>
+    <string name="register_title">新用户注册</string>
     <string name="register_description">注册后将自动登录，并同步该账号的 OpenP2P Token。</string>
     <string name="username_minimum">用户名（至少 8 个字符）</string>
     <string name="password_minimum">密码（至少 8 个字符）</string>
@@ -67,7 +67,7 @@
     <string name="registration_success">注册成功，已自动登录</string>
     <string name="registration_failed">注册失败，请稍后重试</string>
     <string name="username_password_minimum_error">用户名和密码不能少于 8 个字符</string>
-    <string name="passwords_do_not_match">两次输入的密码不一致</string>
+    <string name="passwords_do_not_match">两次输入密码不一致，请重新输入</string>
     <string name="agreement_required">请先阅读并同意用户协议和隐私协议</string>
     <string name="settings">设置</string>
     <string name="appearance_settings">外观设置</string>
@@ -78,16 +78,16 @@
     <string name="always_light">始终浅色</string>
     <string name="theme_color">主题色</string>
     <string name="not_provided">未填写</string>
-    <string name="refresh_timeout">刷新超时</string>
+    <string name="refresh_timeout">请求超时，请稍后重试</string>
     <string name="home_subtitle">安全、轻量的点对点连接</string>
-    <string name="devices_subtitle">管理 OpenP2P 设备与端口映射</string>
+    <string name="devices_subtitle">管理 OpenP2P 设备与端口转发</string>
     <string name="logs_subtitle">实时查看 OpenP2P 核心输出</string>
     <string name="logs_empty_description">启动核心后，日志将在这里实时显示</string>
     <string name="connection_failed_hint">启动失败，请前往日志页面查看详情</string>
     <string name="virtual_network_ready">已就绪</string>
     <string name="virtual_network_error">连接异常</string>
-    <string name="copy_virtual_ip">复制虚拟 IP</string>
-    <string name="virtual_ip_copied">虚拟 IP 已复制</string>
+    <string name="copy_virtual_ip">复制虚拟IP</string>
+    <string name="virtual_ip_copied">虚拟IP 已复制</string>
     <string name="app_version">应用版本</string>
     <string name="device_display_name">设备显示名称</string>
     <string name="software_source">软件开源</string>
@@ -95,6 +95,15 @@
     <string name="unknown_value">未知</string>
     <string name="android_native_client">Android 原生客户端</string>
     <string name="token_sync_hint">OpenP2P Token 已自动同步并锁定</string>
-    <string name="public_ip">公网 IP</string>
+    <string name="public_ip">公网IPv4</string>
     <string name="account_label">账号</string>
+    <string name="network_mode_tip">P2P 模式适合成员较少的网络；中心模式适合成员较多且有稳定在线中心节点的网络。</string>
+    <string name="central_node_tip">中心节点应稳定在线且容易建立 P2P 连接；有公网 IP 时需放行监听端口的 TCP/UDP，NAT4 设备不能作为中心节点。</string>
+    <string name="network_resource_tip">留空表示不共享资源。用英文逗号分隔 IP 段或单个 IP，例如 192.168.3.0/24,192.168.1.8/32；目前仅支持 Linux。</string>
+    <string name="whitelist_tip">支持单个 IP、IP 段或范围，例如 127.0.0.1,192.168.1.0/24,10.1.1.30-10.1.1.50</string>
+    <string name="android_low_port_tip">Android 设备监听端口小于 10000 有可能失败。</string>
+    <string name="too_many_members">成员数不能超过10个</string>
+    <string name="member_versions_differ">各成员版本不一致，可能无法通信，建议都升级到最新版本</string>
+    <string name="mapping_versions_differ">版本不一致，可能无法建立端口转发，建议都升级到最新版本</string>
+    <string name="priority_udp_first">UDP优先</string>
 </resources>

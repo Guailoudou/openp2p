@@ -142,6 +142,7 @@ class ManagementApiClient {
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (authenticated && code == 401) throw ApiException("登录凭证无效，请重新登录")
             if (code !in 200..299) throw ApiException("管理服务请求失败 ($code)${if (text.isBlank()) "" else "：$text"}")
             val result = if (text.isBlank()) JSONObject() else JSONObject(text)
             if (authenticated) checked(result)
