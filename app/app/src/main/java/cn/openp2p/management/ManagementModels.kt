@@ -1,5 +1,7 @@
 package cn.openp2p.management
 
+import java.math.BigInteger
+
 data class UserProfile(
     val token: String = "", val user: String = "", val email: String = "",
     val phone: String = "", val addTime: String = ""
@@ -33,7 +35,9 @@ data class SdwanMember(
 data class SdwanConfig(
     var gateway: String = "10.0.0.0/24", var mode: String = "fullmesh",
     var centralNode: String = "", var forceRelay: Int = 0, var punchPriority: Int = 0,
-    val nodes: MutableList<SdwanMember> = mutableListOf()
+    val nodes: MutableList<SdwanMember> = mutableListOf(),
+    val id: BigInteger? = null, val name: String? = null, val enable: Number? = null,
+    val tunnelNum: Number? = null, val mtu: Number? = null
 ) {
     fun snapshot() = copy(nodes = nodes.map { it.copy() }.toMutableList())
 }

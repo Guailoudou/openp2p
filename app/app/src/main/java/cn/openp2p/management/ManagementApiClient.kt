@@ -2,6 +2,7 @@ package cn.openp2p.management
 
 import cn.openp2p.security.tokenValidationError
 
+import java.math.BigDecimal
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -62,7 +63,12 @@ class ManagementApiClient {
         val root = request("/api/v1/sdwans/", "GET")
         val result = SdwanConfig(
             root.optString("gateway", "10.0.0.0/24"), root.optString("mode", "fullmesh"),
-            root.optString("centralNode"), root.optInt("forceRelay"), root.optInt("punchPriority")
+            root.optString("centralNode"), root.optInt("forceRelay"), root.optInt("punchPriority"),
+            id = (root.opt("id") as? Number)?.let { BigDecimal(it.toString()).toBigInteger() },
+            name = root.opt("name") as? String,
+            enable = root.opt("enable") as? Number,
+            tunnelNum = root.opt("tunnelNum") as? Number,
+            mtu = root.opt("mtu") as? Number
         )
         val array = root.optJSONArray("Nodes") ?: JSONArray()
         for (i in 0 until array.length()) array.optJSONObject(i)?.let {
@@ -101,8 +107,14 @@ class ManagementApiClient {
     suspend fun saveSdwan(value: SdwanConfig) {
         val nodes = JSONArray()
         value.nodes.forEach { nodes.put(JSONObject().put("name", it.name).put("ip", it.ip).put("resource", it.resource)) }
-        checked(request("/api/v1/sdwan/edit", "POST", JSONObject().put("gateway", value.gateway).put("mode", value.mode)
-            .put("centralNode", value.centralNode).put("forceRelay", value.forceRelay).put("punchPriority", value.punchPriority).put("Nodes", nodes)))
+        val body = JSONObject().put("gateway", value.gateway).put("mode", value.mode)
+            .put("centralNode", value.centralNode).put("forceRelay", value.forceRelay).put("punchPriority", value.punchPriority).put("Nodes", nodes)
+        value.id?.let { body.put("id", it) }
+        value.name?.let { body.put("name", it) }
+        value.enable?.let { body.put("enable", it) }
+        value.tunnelNum?.let { body.put("tunnelNum", it) }
+        value.mtu?.let { body.put("mtu", it) }
+        checked(request("/api/v1/sdwan/edit", "POST", body))
     }
 
     suspend fun refreshSdwanNode(device: Device) = checked(push(device.name, 22, 0, device.edgeServer))
