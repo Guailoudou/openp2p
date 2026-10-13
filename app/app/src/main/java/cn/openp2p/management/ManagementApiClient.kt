@@ -1,5 +1,7 @@
 package cn.openp2p.management
 
+import cn.openp2p.security.tokenValidationError
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -23,7 +25,7 @@ class ManagementApiClient {
         val root = request("/api/v1/user/profile", "POST")
         val p = root.optJSONObject("profile") ?: JSONObject()
         val coreToken = p.optString("token").trim()
-        if (root.optInt("error", 0) != 0 || !coreToken.matches(Regex("[1-9]\\d*"))) {
+        if (root.optInt("error", 0) != 0 || tokenValidationError(coreToken).isNotEmpty()) {
             throw ApiException("无法从用户信息获取 OpenP2P Token")
         }
         return UserProfile(coreToken, p.optString("user"), p.optString("email"), p.optString("phone"), p.optString("addtime"))
@@ -129,12 +131,24 @@ class ManagementApiClient {
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
             if (code !in 200..299) throw ApiException("管理服务请求失败 ($code)${if (text.isBlank()) "" else "：$text"}")
-            if (text.isBlank()) JSONObject() else JSONObject(text)
+            val result = if (text.isBlank()) JSONObject() else JSONObject(text)
+            if (authenticated) checked(result)
+            result
         } finally { connection.disconnect() }
     }
 
     private fun checked(root: JSONObject) {
-        if (root.has("error") && root.optInt("error") != 0) throw ApiException("操作失败 (${root.optInt("error")})")
+        val raw = root.opt("error")
+        val error = when (raw) {
+            is Boolean -> if (raw) 1 else 0
+            is Number -> raw.toDouble()
+            is String -> if (raw.isEmpty()) 0 else raw.toDoubleOrNull() ?: 1
+            else -> 0
+        }
+        if (error.toDouble() != 0.0) {
+            val detail = root.optString("message").ifBlank { root.optString("msg") }
+            throw ApiException("管理服务操作失败 ($raw)${if (detail.isBlank()) "" else ": $detail"}")
+        }
     }
     private fun parseDevice(o: JSONObject) = Device(o.optString("id"), o.optString("name"), o.optString("remark"),
         o.optString("os"), o.optString("version"), o.optString("ip"), o.optString("ipv6"), o.optString("lanip"),
