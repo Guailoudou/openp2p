@@ -143,6 +143,16 @@ export struct ProfilePage {
           })
         }
         .width('100%').padding(16).backgroundColor($r('app.color.card_background')).borderRadius(16)
+
+        Text('1. 模拟定位开启后需要重启软件。\n' +
+          '2. 模拟定位需要在设置中将定位权限设置为“始终允许”。\n' +
+          '3. 模拟定位需要开启定位。\n' +
+          '4. 推荐使用持续后台任务或模拟定位，个人觉得模拟定位效果比较好。')
+          .width('100%')
+          .fontSize(14)
+          .lineHeight(24)
+          .fontColor($r('app.color.text_secondary'))
+          .padding({ left: 4, right: 4, top: 4 })
       }
       .width('100%')
       .constraintSize({ maxWidth: 760 })

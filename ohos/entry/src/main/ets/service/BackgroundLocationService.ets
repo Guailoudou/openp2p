@@ -5,7 +5,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 
 const DOMAIN = 0x0;
 const TAG = 'OpenP2P-Location';
-const BACKGROUND_LOCATION_INTERVAL_SECONDS = 60;
+const BACKGROUND_LOCATION_INTERVAL_SECONDS = 7200;
 
 export class BackgroundLocationService {
   private static active: boolean = false;
@@ -87,9 +87,11 @@ export class BackgroundLocationService {
       return false;
     }
     try {
-      const request: geoLocationManager.ContinuousLocationRequest = {
-        interval: BACKGROUND_LOCATION_INTERVAL_SECONDS,
-        locationScenario: geoLocationManager.PowerConsumptionScenario.NO_POWER_CONSUMPTION
+      const request: geoLocationManager.LocationRequest = {
+        priority: geoLocationManager.LocationRequestPriority.LOW_POWER,
+        timeInterval: BACKGROUND_LOCATION_INTERVAL_SECONDS,
+        distanceInterval: 10000,
+        maxAccuracy: 1000
       };
       geoLocationManager.on('locationChange', request, BackgroundLocationService.locationCallback);
       BackgroundLocationService.active = true;
