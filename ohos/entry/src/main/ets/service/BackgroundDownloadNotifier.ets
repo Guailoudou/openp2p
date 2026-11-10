@@ -18,18 +18,12 @@ export class BackgroundDownloadNotifier {
   private progressUpdateCount: number = 0;
   private timer: number = 0;
   private running: boolean = false;
-  private startedAt: number = 0;
   private updating: boolean = false;
 
   async start(notificationId: number, context: common.Context): Promise<void> {
     this.context = context;
-    if (!this.running) {
-      this.startedAt = Date.now();
-    }
     this.running = true;
     this.notificationId = notificationId;
-    this.progress = INITIAL_PROGRESS;
-    this.progressUpdateCount = 0;
     if (this.timer !== 0) {
       clearInterval(this.timer);
     }
@@ -41,7 +35,6 @@ export class BackgroundDownloadNotifier {
 
   async stop(): Promise<void> {
     this.running = false;
-    this.startedAt = 0;
     if (this.timer !== 0) {
       clearInterval(this.timer);
       this.timer = 0;
@@ -69,21 +62,27 @@ export class BackgroundDownloadNotifier {
   }
 
   private connectionText(): string {
-    const now = Date.now();
-    const seconds = Math.max(0, Math.floor((now - this.startedAt) / 1000));
-    const hours = String(Math.floor(seconds / 3600)).padStart(2, '0');
-    const minutes = String(Math.floor(seconds / 60) % 60).padStart(2, '0');
-    const remainder = String(seconds % 60).padStart(2, '0');
-    let connection = '连接状态获取中';
     try {
       if (this.context !== undefined) {
         const status = CoreStatusStore.read(this.context);
-        connection = status.state === 'vpn_ready' && now - (status.timestamp ?? 0) <= 35 * 1000 ?
-          'VPN 已连接' : 'VPN 未连接';
+        const now = Date.now();
+        if (now - status.timestamp > 35 * 1000) {
+          return '核心状态确认中';
+        }
+        const startedAt = status.coreStartedAt ?? 0;
+        if (startedAt <= 0) {
+          return '核心尚未运行';
+        }
+        const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+        const hours = String(Math.floor(seconds / 3600)).padStart(2, '0');
+        const minutes = String(Math.floor(seconds / 60) % 60).padStart(2, '0');
+        const remainder = String(seconds % 60).padStart(2, '0');
+        const connection = status.state === 'vpn_ready' ? 'VPN 已连接' : 'VPN 未连接';
+        return `核心运行 ${hours}:${minutes}:${remainder} · ${connection}`;
       }
     } catch (_) {
     }
-    return `保活中 ${hours}:${minutes}:${remainder} · ${connection}`;
+    return '核心状态获取中';
   }
 
   private async publishProgress(): Promise<void> {

@@ -335,7 +335,8 @@ export class CoreService {
       state,
       message,
       timestamp: Date.now(),
-      requestId: this.requestId
+      requestId: this.requestId,
+      coreStartedAt: state === 'vpn_requested' ? this.readStatus().coreStartedAt : 0
     };
     CoreStatusStore.write(this.context, status);
   }

@@ -13,7 +13,14 @@ export interface CoreStatus {
   coreTunGeneration?: number;
   lastPacketInMs?: number;
   lastPacketOutMs?: number;
-  connectedSince?: number;
+  coreStartedAt?: number;
+}
+
+export function coreStartTimeForState(state: string, startedAt: number, now: number): number {
+  if (state === 'stopped' || state === 'failed' || state === 'recovery_exhausted' || state === 'not_started') {
+    return 0;
+  }
+  return state === 'core_started' && startedAt === 0 ? now : startedAt;
 }
 
 export class CoreStatusStore {
@@ -43,7 +50,7 @@ export class CoreStatusStore {
       state: value[0], message: value[1], timestamp: Number(value[2]), requestId: Number(value[3]),
       coreAlive: value[4] === '1', controlOnline: value[5] === '1', vpnFdReady: value[6] === '1',
       vpnGeneration: Number(value[7]), coreTunGeneration: Number(value[8]),
-      lastPacketInMs: Number(value[9]), lastPacketOutMs: Number(value[10]), connectedSince: Number(value[11])
+      lastPacketInMs: Number(value[9]), lastPacketOutMs: Number(value[10]), coreStartedAt: Number(value[11])
     };
   }
 
@@ -53,7 +60,7 @@ export class CoreStatusStore {
       status.state, status.message, String(status.timestamp), String(status.requestId),
       status.coreAlive ? '1' : '0', status.controlOnline ? '1' : '0', status.vpnFdReady ? '1' : '0',
       String(status.vpnGeneration ?? 0), String(status.coreTunGeneration ?? 0),
-      String(status.lastPacketInMs ?? 0), String(status.lastPacketOutMs ?? 0), String(status.connectedSince ?? 0)
+      String(status.lastPacketInMs ?? 0), String(status.lastPacketOutMs ?? 0), String(status.coreStartedAt ?? 0)
     ];
     CoreStatusStore.getStore(context).putSync('snapshot', value);
   }

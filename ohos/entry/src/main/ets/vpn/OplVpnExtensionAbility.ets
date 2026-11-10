@@ -6,7 +6,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import coreNative from 'libentry.so';
 import { RuntimeStateStore } from '../service/RuntimeStateStore';
 import { TokenStore } from '../service/TokenStore';
-import { CoreStatusStore } from '../service/CoreStatusStore';
+import { CoreStatusStore, coreStartTimeForState } from '../service/CoreStatusStore';
 
 const DOMAIN = 0x0;
 const TAG = 'OPL-VPN';
@@ -87,7 +87,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
   private lastVpnConfigFingerprint: string = '';
   private controlOfflineSince: number = 0;
   private currentStatusState: string = 'starting';
-  private connectedSince: number = 0;
+  private coreStartedAt: number = 0;
   private currentStatusMessage: string = 'VPN 扩展已启动';
 
   onCreate(want: Want): void {
@@ -176,13 +176,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
   }
 
   private writeStatus(state: string, message: string, requestId: number = this.requestId): void {
-    if (state === 'vpn_ready') {
-      if (this.connectedSince === 0) {
-        this.connectedSince = Date.now();
-      }
-    } else {
-      this.connectedSince = 0;
-    }
+    this.coreStartedAt = coreStartTimeForState(state, this.coreStartedAt, Date.now());
     this.currentStatusState = state;
     this.currentStatusMessage = message;
     try {
@@ -191,7 +185,7 @@ export default class OplVpnExtensionAbility extends VpnExtensionAbility {
         state,
         message,
         timestamp: Date.now(),
-        connectedSince: this.connectedSince,
+        coreStartedAt: this.coreStartedAt,
         requestId,
         coreAlive: health.coreAlive === true,
         controlOnline: health.controlOnline === true,
